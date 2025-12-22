@@ -1,0 +1,536 @@
+<div class="playlists-page">
+  <!-- Hero Header -->
+  <div class="playlists-hero">
+    <div class="hero-content">
+      <div class="hero-icon">
+        <i class="fas fa-record-vinyl"></i>
+      </div>
+      <h1 class="hero-title">Your Music Library</h1>
+      <p class="hero-subtitle">Curate your perfect soundtracks</p>
+    </div>
+    <button id="createPlaylistBtn" class="btn-create-hero">
+      <i class="fas fa-plus-circle"></i>
+      <span>New Playlist</span>
+    </button>
+  </div>
+
+  <!-- Playlists Grid -->
+  <div class="playlists-section">
+    <% if(playlists.length > 0){ %>
+      <div class="playlists-grid-modern">
+        <% playlists.forEach((playlist, idx) => { %>
+          <div class="playlist-card-modern fade-in" style="animation-delay: <%= idx * 0.05 %>s;">
+            <!-- Playlist Cover with Gradient Overlay -->
+            <div class="playlist-cover">
+              <% if(playlist.songs.length > 0 && playlist.songs[0] && playlist.songs[0].thumbnail){ %>
+                <img src="<%= playlist.songs[0].thumbnail %>" alt="<%= playlist.name %>" class="cover-image">
+              <% } else { %>
+                <div class="cover-placeholder">
+                  <i class="fas fa-music"></i>
+                </div>
+              <% } %>
+              <div class="cover-overlay">
+                <a href="/playlists/view/<%= playlist._id %>" class="play-overlay-btn">
+                  <i class="fas fa-play"></i>
+                </a>
+              </div>
+            </div>
+
+            <!-- Playlist Info -->
+            <div class="playlist-info">
+              <a href="/playlists/view/<%= playlist._id %>" class="playlist-name-link">
+                <h3 class="playlist-name"><%= playlist.name %></h3>
+              </a>
+              <div class="playlist-meta">
+                <span class="song-count-badge">
+                  <i class="fas fa-music"></i>
+                  <%= playlist.songs.length %> <%= playlist.songs.length === 1 ? 'song' : 'songs' %>
+                </span>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="playlist-actions">
+              <form class="delete-form" action="/playlists/<%= playlist._id %>/delete" method="POST">
+                <button type="button" class="btn-action delete" title="Delete playlist" onclick="event.preventDefault(); window.showModal({title: 'Delete Playlist', message: 'Are you sure you want to delete &quot;<%= playlist.name %>&quot;? This action cannot be undone.', danger: true, confirmText: 'Delete', onConfirm: () => { this.closest('form').submit(); }});">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <div class="empty-state">
+        <div class="empty-icon">
+          <i class="fas fa-compact-disc"></i>
+        </div>
+        <h3 class="empty-title">No Playlists Yet</h3>
+        <p class="empty-message">Start creating your music collections and organize your favorite tracks</p>
+        <button class="btn-empty-action" onclick="document.getElementById('createPlaylistBtn').click()">
+          <i class="fas fa-plus"></i>
+          Create Your First Playlist
+        </button>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<style>
+  .playlists-page {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 40px 60px;
+  }
+
+  /* Hero Section */
+  .playlists-hero {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border-radius: 24px;
+    padding: 60px 48px;
+    margin-bottom: 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 32px;
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .playlists-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 50%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .hero-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-icon {
+    width: 80px;
+    height: 80px;
+    background: var(--primary-gradient);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    color: #ffffff;
+    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+    animation: rotate-slow 20s linear infinite;
+  }
+
+  @keyframes rotate-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .hero-title {
+    font-size: 48px;
+    font-weight: 800;
+    margin: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-subtitle {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 8px 0 0 0;
+    font-weight: 500;
+  }
+
+  .btn-create-hero {
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+  }
+
+  .btn-create-hero:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  }
+
+  .btn-create-hero:active {
+    transform: translateY(-1px);
+  }
+
+  .btn-create-hero i {
+    font-size: 20px;
+  }
+
+  /* Playlists Grid */
+  .playlists-section {
+    margin-top: 24px;
+  }
+
+  .playlists-grid-modern {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 28px;
+  }
+
+  .playlist-card-modern {
+    background: var(--bg-card);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(102, 126, 234, 0.1);
+    position: relative;
+    cursor: pointer;
+  }
+
+  .playlist-card-modern:hover {
+    transform: translateY(-12px);
+    border-color: rgba(102, 126, 234, 0.3);
+    box-shadow: 0 16px 48px rgba(102, 126, 234, 0.3);
+  }
+
+  /* Playlist Cover */
+  .playlist-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+  }
+
+  .cover-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.4s ease;
+  }
+
+  .playlist-card-modern:hover .cover-image {
+    transform: scale(1.1);
+  }
+
+  .cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .cover-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .playlist-card-modern:hover .cover-overlay {
+    opacity: 1;
+  }
+
+  .play-overlay-btn {
+    width: 64px;
+    height: 64px;
+    background: var(--primary-gradient);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #ffffff;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
+    transform: scale(0.8);
+  }
+
+  .playlist-card-modern:hover .play-overlay-btn {
+    transform: scale(1);
+  }
+
+  .play-overlay-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.7);
+  }
+
+  /* Playlist Info */
+  .playlist-info {
+    padding: 20px;
+  }
+
+  .playlist-name-link {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .playlist-name {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+
+  .playlist-name-link:hover .playlist-name {
+    color: #667eea;
+  }
+
+  .playlist-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .song-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #667eea;
+  }
+
+  .song-count-badge i {
+    font-size: 10px;
+  }
+
+  /* Playlist Actions */
+  .playlist-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+  }
+
+  .btn-action {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  .playlist-card-modern:hover .btn-action {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .btn-action.delete {
+    background: rgba(255, 107, 107, 0.9);
+    color: #ffffff;
+  }
+
+  .btn-action.delete:hover {
+    background: rgba(255, 107, 107, 1);
+    transform: scale(1.1);
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 100px 40px;
+    background: var(--bg-card);
+    border-radius: 24px;
+    border: 2px dashed rgba(102, 126, 234, 0.3);
+  }
+
+  .empty-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 32px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: rgba(102, 126, 234, 0.5);
+  }
+
+  .empty-title {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .empty-message {
+    font-size: 16px;
+    color: var(--text-muted);
+    margin: 0 0 32px 0;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .btn-empty-action {
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  }
+
+  .btn-empty-action:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  }
+
+  /* Responsive */
+  @media (max-width: 1200px) {
+    .playlists-grid-modern {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 24px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .playlists-page {
+      padding: 0 20px 40px;
+    }
+
+    .playlists-hero {
+      flex-direction: column;
+      text-align: center;
+      padding: 40px 24px;
+    }
+
+    .hero-content {
+      flex-direction: column;
+    }
+
+    .hero-title {
+      font-size: 32px;
+    }
+
+    .hero-subtitle {
+      font-size: 16px;
+    }
+
+    .btn-create-hero {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .playlists-grid-modern {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .empty-state {
+      padding: 60px 24px;
+    }
+
+    .empty-title {
+      font-size: 24px;
+    }
+
+    .empty-message {
+      font-size: 14px;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.6s ease-out forwards;
+    opacity: 0;
+  }
+</style>
+<script>
+  // Create Playlist Button Handler
+  const createPlaylistBtn = document.getElementById("createPlaylistBtn");
+  
+  createPlaylistBtn.addEventListener("click", () => {
+    window.showModal({
+      title: 'Create New Playlist',
+      message: 'Enter a name for your new playlist:',
+      input: true,
+      placeholder: 'My Awesome Playlist',
+      confirmText: 'Create',
+      onConfirm: (playlistName) => {
+        if (playlistName && playlistName.trim()) {
+          // Create a hidden form and submit
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = "/playlists";
+          
+          const nameInput = document.createElement("input");
+          nameInput.type = "hidden";
+          nameInput.name = "name";
+          nameInput.value = playlistName.trim();
+          
+          form.appendChild(nameInput);
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    });
+  });
+</script>

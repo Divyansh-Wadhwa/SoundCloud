@@ -1,0 +1,359 @@
+<div class="favorites-container">
+  <div class="favorites-header">
+    <div class="header-content">
+      <i class="fas fa-heart header-icon"></i>
+      <h1>My Favorites</h1>
+      <p class="subtitle"><%= favorites.length %> <%= favorites.length === 1 ? 'song' : 'songs' %></p>
+    </div>
+  </div>
+
+  <% if (favorites.length > 0) { %>
+    <div class="favorites-grid">
+      <% favorites.forEach((song, idx) => { %>
+        <div class="song-card fade-in" style="animation-delay: <%= idx * 50 %>ms">
+          <div class="song-thumbnail">
+            <% if (song.thumbnail) { %>
+              <img src="<%= song.thumbnail %>" alt="<%= song.title %>">
+            <% } else { %>
+              <div class="thumbnail-placeholder">
+                <i class="fas fa-music"></i>
+              </div>
+            <% } %>
+            <a href="/player/<%= song._id %>" class="play-btn-overlay">
+              <i class="fas fa-play"></i>
+            </a>
+          </div>
+          <div class="song-info">
+            <h4 class="song-title"><%= song.title %></h4>
+            <p class="song-artist"><%= song.artist %></p>
+          </div>
+          <div class="song-actions">
+            <button class="favorite-btn active" onclick="toggleFavorite('<%= song._id %>', this)" title="Remove from favorites">
+              <i class="fas fa-heart"></i>
+            </button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="empty-state">
+      <i class="fas fa-heart-broken"></i>
+      <h3>No favorites yet</h3>
+      <p>Start adding songs to your favorites to see them here</p>
+      <a href="/" class="btn-primary">Browse Songs</a>
+    </div>
+  <% } %>
+</div>
+
+<style>
+  .favorites-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    min-height: calc(100vh - 200px);
+  }
+
+  .favorites-header {
+    margin-bottom: 48px;
+    text-align: center;
+  }
+
+  .header-content {
+    display: inline-block;
+  }
+
+  .header-icon {
+    font-size: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+    animation: heartbeat 2s ease-in-out infinite;
+  }
+
+  @keyframes heartbeat {
+    0%, 100% { transform: scale(1); }
+    10%, 30% { transform: scale(1.1); }
+    20%, 40% { transform: scale(1); }
+  }
+
+  .favorites-header h1 {
+    font-size: 48px;
+    font-weight: 800;
+    margin: 0 0 8px 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    font-size: 18px;
+    color: var(--text-muted, #a0a0c0);
+    margin: 0;
+  }
+
+  .favorites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+  }
+
+  .song-card {
+    background: var(--bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .song-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+  }
+
+  .song-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
+    border-color: rgba(102, 126, 234, 0.3);
+  }
+
+  .song-card:hover::before {
+    transform: scaleX(1);
+  }
+
+  .song-thumbnail {
+    position: relative;
+    width: 100%;
+    padding-top: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    background: var(--bg-tertiary, #1a1a2e);
+  }
+
+  .song-thumbnail img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .thumbnail-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: var(--text-dim, #707090);
+  }
+
+  .play-btn-overlay {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .song-card:hover .play-btn-overlay {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .play-btn-overlay:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  }
+
+  .song-info {
+    margin-bottom: 12px;
+  }
+
+  .song-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    color: var(--text-primary, #ffffff);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .song-artist {
+    font-size: 14px;
+    color: var(--text-muted, #a0a0c0);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .song-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .favorite-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #a0a0c0);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .favorite-btn:hover {
+    color: #667eea;
+    transform: scale(1.1);
+  }
+
+  .favorite-btn.active {
+    color: #ff6b6b;
+    animation: heartPop 0.3s ease;
+  }
+
+  @keyframes heartPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+  }
+
+  .empty-state i {
+    font-size: 80px;
+    color: var(--text-dim, #707090);
+    margin-bottom: 24px;
+  }
+
+  .empty-state h3 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary, #ffffff);
+    margin: 0 0 12px 0;
+  }
+
+  .empty-state p {
+    font-size: 16px;
+    color: var(--text-muted, #a0a0c0);
+    margin: 0 0 32px 0;
+  }
+
+  .btn-primary {
+    display: inline-block;
+    padding: 12px 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 24px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .favorites-header h1 {
+      font-size: 32px;
+    }
+
+    .header-icon {
+      font-size: 36px;
+    }
+
+    .favorites-grid {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+  }
+</style>
+
+<script>
+  function toggleFavorite(songId, button) {
+    const isActive = button.classList.contains('active');
+    const url = isActive ? `/favorites/remove/${songId}` : `/favorites/add/${songId}`;
+    
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        if (isActive) {
+          // Remove from page
+          button.closest('.song-card').style.animation = 'fadeOut 0.3s ease forwards';
+          setTimeout(() => {
+            button.closest('.song-card').remove();
+            // Check if no more favorites
+            const grid = document.querySelector('.favorites-grid');
+            if (grid && grid.children.length === 0) {
+              location.reload();
+            }
+          }, 300);
+        } else {
+          button.classList.add('active');
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error toggling favorite:', error);
+    });
+  }
+
+  @keyframes fadeOut {
+    to {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+  }
+</script>
