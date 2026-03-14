@@ -8,10 +8,6 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 
-console.log("Loaded ENV →", {
-  USE_REDIS: process.env.USE_REDIS,
-  REDIS_URL: process.env.REDIS_URL,
-});
 
 import expressLayouts from "express-ejs-layouts";
 import mongoose from "mongoose";
@@ -25,7 +21,6 @@ import fs from "fs";
 import User from "./models/User.js";
 import Song from "./models/Song.js";
 import Album from "./models/Album.js";
-import { initRedis, isLocked, incrementAttempts, resetAttempts } from "./utils/redisLock.js";
 import { encrypt, decrypt } from "./utils/encryption.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,9 +64,6 @@ app.use(
 );
 
 
-initRedis()
-  .then(() => console.log("Redis initialized"))
-  .catch(err => console.log("Redis init failed:", err));
 
 // MongoDB
 mongoose
@@ -79,8 +71,6 @@ mongoose
   .then(() => console.log("MongoDB connected ✅"))
   .catch((err) => console.log(err));
 
-// Note: Redis will be used on-demand inside helpers. We avoid forcing a connection
-// at startup so the app can run even if Redis is unreachable (helpers fail-open).
 
 // Expose user/admin/albums
 app.use(async (req, res, next) => {
@@ -125,22 +115,6 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  // Check if account is locked (by Redis)
-  try {
-    const lockTtl = await isLocked(email);
-    if (lockTtl && lockTtl > 0) {
-      return res.status(200).render("login", {
-        title: "Login",
-        error: `Account locked due to too many failed attempts. Try again in ${lockTtl} seconds.`,
-        email: email || "",
-        lockTtl: Number(lockTtl),
-      });
-    }
-  } catch (err) {
-    // ignore Redis errors and proceed (fail open)
-    console.warn("Redis lock check failed:", err && err.message ? err.message : err);
-  }
-
   // User login
   const user = await User.findOne({ email });
   if (!user) {
@@ -163,12 +137,6 @@ app.post("/login", async (req, res) => {
   }
 
   if (validPassword) {
-    // successful login -> reset attempts and continue
-    try {
-      await resetAttempts(email);
-    } catch (err) {
-      console.warn("Failed to reset login attempts:", err && err.message ? err.message : err);
-    }
     // Store a plain object in session to avoid attaching Mongoose document methods
     try {
       req.session.user = {
@@ -186,39 +154,21 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  // failed login -> increment attempts and possibly lock
-  try {
-    const { attempts, locked, ttl } = await incrementAttempts(email);
-    if (locked) {
-      return res.status(200).render("login", {
-        title: "Login",
-        error: `Account locked due to too many failed attempts. Try again in ${ttl} seconds.`,
-        email: email || "",
-        lockTtl: Number(ttl),
-      });
-    }
-    const remaining = Math.max(0, 5 - attempts);
-    return res.status(200).render("login", {
-      title: "Login",
-      error: `Invalid email or password. ${remaining} attempts left before temporary lock.`,
-      email: email || "",
-    });
-  } catch (err) {
-    console.warn("Failed to increment login attempts:", err && err.message ? err.message : err);
-    return res.status(200).render("login", {
-      title: "Login",
-      error: "Invalid email or password",
-      email: email || "",
-    });
-  }
+  // failed login -> show error message
+  return res.status(200).render("login", {
+    title: "Login",
+    error: "Invalid email or password",
+    email: email || "",
+  });
 });
 
 app.get("/register", (req, res) => res.render("register", { title: "Register" }));
 app.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
+  
   // Validate duplicate email
-  const existing = await User.findOne({ email });
-  if (existing) {
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
     return res.status(200).render("register", {
       title: "Register",
       error: "This email is already in use — please register with another email.",
@@ -227,11 +177,53 @@ app.post("/register", async (req, res) => {
     });
   }
 
+  // Validate duplicate username
+  const existingUsername = await User.findOne({ username });
+  if (existingUsername) {
+    return res.status(200).render("register", {
+      title: "Register",
+      error: "This username is already taken — please choose another username.",
+      username: username || "",
+      email: email || "",
+    });
+  }
+
   // Encrypt the password before saving (note: reversible encryption)
   const encryptedPassword = encrypt(password);
   const newUser = new User({ username, email, password: encryptedPassword, playlists: [] });
-  await newUser.save();
-  res.redirect("/login");
+  
+  try {
+    await newUser.save();
+    res.redirect("/login");
+  } catch (err) {
+    // Handle MongoDB duplicate key errors as fallback
+    if (err.code === 11000) {
+      let errorMessage = "Registration failed. This ";
+      if (err.keyPattern?.email) {
+        errorMessage += "email is already in use.";
+      } else if (err.keyPattern?.username) {
+        errorMessage += "username is already taken.";
+      } else {
+        errorMessage += "information is already in use.";
+      }
+      
+      return res.status(200).render("register", {
+        title: "Register",
+        error: errorMessage,
+        username: username || "",
+        email: email || "",
+      });
+    }
+    
+    // Handle other errors
+    console.error("Registration error:", err);
+    return res.status(200).render("register", {
+      title: "Register",
+      error: "Registration failed. Please try again.",
+      username: username || "",
+      email: email || "",
+    });
+  }
 });
 
 app.get("/logout", (req, res) => req.session.destroy(() => res.redirect("/login")));
@@ -947,8 +939,6 @@ app.get("/album/:id", requireLogin, async (req, res) => {
 // Start server
 
 
-console.log("USE_REDIS =", process.env.USE_REDIS);
-console.log("REDIS_URL =", process.env.REDIS_URL);
 
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

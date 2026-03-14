@@ -21,8 +21,7 @@
     "express-ejs-layouts": "^2.5.1",
     "express-fileupload": "^1.5.2",
     "express-session": "^1.18.2",
-    "mongoose": "^8.18.2",
-    "redis": "^5.9.0"
+    "mongoose": "^8.18.2"
   },
   "devDependencies": {
     "jest": "^29.7.0",
