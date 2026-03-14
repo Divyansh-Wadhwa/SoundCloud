@@ -1,9 +1,8 @@
-console.log("SoundCloud Loaded ♪");
+// SoundCloud Loaded ♪
 
 // Log when a song is clicked
 document.querySelectorAll(".song").forEach(song => {
   song.addEventListener("click", () => {
-    console.log("Clicked:", song.querySelector("p").innerText);
   });
 });
 

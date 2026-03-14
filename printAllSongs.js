@@ -15,19 +15,10 @@ async function main() {
     await mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
     const songs = await Song.find();
     if (songs.length === 0) {
-      console.log('No songs found.');
     } else {
       songs.forEach(song => {
-        console.log('------------------------------');
-        console.log(`ID: ${song._id}`);
-        console.log(`Title: ${song.title}`);
-        console.log(`Artist: ${song.artist}`);
-        if (song.language) console.log(`Language: ${song.language}`);
-        if (song.album) console.log(`Album: ${song.album}`);
         // Print more fields as needed
       });
-      console.log('------------------------------');
-      console.log(`Total songs: ${songs.length}`);
     }
   } catch (err) {
     console.error('Error:', err);

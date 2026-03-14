@@ -131,21 +131,15 @@ const sampleSongs = [
 
 async function seedSongs() {
   try {
-    console.log('🎵 Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
 
     // Clear existing songs (optional - comment out if you want to keep existing)
-    console.log('🗑️  Clearing existing songs...');
     await Song.deleteMany({});
-    console.log('✅ Cleared existing songs');
 
-    console.log('� Importing royalty-free songs from Bensound...');
     let imported = 0;
     
     for (const track of sampleSongs) {
       try {
-        console.log(`  ⏳ Adding: ${track.title} by ${track.artist}`);
         
         const song = new Song({
           title: track.title,
@@ -156,15 +150,12 @@ async function seedSongs() {
 
         await song.save();
         imported++;
-        console.log(`  ✅ Saved (${imported}/${sampleSongs.length})`);
         
       } catch (err) {
         console.error(`  ❌ Error adding ${track.title}:`, err.message);
       }
     }
 
-    console.log(`\n🎉 Successfully imported ${imported} songs!`);
-    console.log('💡 Note: These songs stream directly from Bensound CDN (Creative Commons License)');
     process.exit(0);
     
   } catch (error) {

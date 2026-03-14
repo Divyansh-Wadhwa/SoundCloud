@@ -50,11 +50,8 @@ function getTopTracks(artistName) {
 
 async function seedSongs() {
   try {
-    console.log('🎵 Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
 
-    console.log('📡 Fetching songs from TheAudioDB...');
     
     // Popular artists to fetch
     const artists = [
@@ -69,21 +66,16 @@ async function seedSongs() {
 
     for (const artistName of artists) {
       try {
-        console.log(`\n🔍 Searching for artist: ${artistName}`);
         
         // Get artist info first
         const artist = await searchArtist(artistName);
         if (!artist) {
-          console.log(`  ❌ Artist not found: ${artistName}`);
           continue;
         }
 
-        console.log(`  ✅ Found artist: ${artist.strArtist}`);
         
         // Get top tracks
-        console.log(`  📥 Fetching top tracks...`);
         const tracks = await getTopTracks(artistName);
-        console.log(`  ✅ Found ${tracks.length} tracks`);
 
         // Import tracks (limit to 5 per artist)
         for (const track of tracks.slice(0, 5)) {
@@ -95,7 +87,6 @@ async function seedSongs() {
             });
             
             if (existing) {
-              console.log(`  ⏭️  Skipping (already exists): ${track.strTrack}`);
               continue;
             }
 
@@ -125,7 +116,6 @@ async function seedSongs() {
 
             await song.save();
             totalImported++;
-            console.log(`  ✅ Imported: ${track.strTrack} (${totalImported} total)`);
 
             // Add delay to avoid rate limiting (30 requests per minute for free tier)
             await new Promise(resolve => setTimeout(resolve, 2500));
@@ -139,8 +129,6 @@ async function seedSongs() {
       }
     }
 
-    console.log(`\n🎉 Successfully imported ${totalImported} new songs from TheAudioDB!`);
-    console.log('💡 Note: Song metadata imported with placeholder audio. Upload actual files via admin panel.');
     process.exit(0);
     
   } catch (error) {

@@ -68,8 +68,8 @@ app.use(
 // MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) => console.log(err));
+  .then(() => {})
+  .catch((err) => {});
 
 
 // Expose user/admin/albums
@@ -352,8 +352,6 @@ app.get("/admin", requireAdmin, async (req, res) => {
   const users = await User.find();
   const albums = await Album.find().populate("songs");
   const allSongs = await Song.find().sort({ createdAt: -1 });
-  console.log('Admin route - req.session.user:', req.session.user);
-  console.log('Admin route - res.locals.user:', res.locals.user);
   res.render("admin-panel", { title: "Admin Panel", user: req.session.user, users, albums, allSongs, layout: false });
 });
 
@@ -941,7 +939,7 @@ app.get("/album/:id", requireLogin, async (req, res) => {
 
 
 if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  app.listen(PORT, () => {});
 }
 
 export default app;
