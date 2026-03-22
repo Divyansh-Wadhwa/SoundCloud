@@ -1,32 +1,24 @@
-
-// ...existing code...
-
-// ...existing code...
-// ...existing code...
-
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-
-
-import expressLayouts from "express-ejs-layouts";
-import mongoose from "mongoose";
+import cors from "cors";
 import session from "express-session";
-import MongoStore from "connect-mongo";
+import pgSession from "connect-pg-simple";
+import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
 import fileUpload from "express-fileupload";
 import fs from "fs";
 
-import User from "./models/User.js";
-import Song from "./models/Song.js";
-import Album from "./models/Album.js";
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 import { encrypt, decrypt } from "./utils/encryption.js";
+import { SQLizerFile } from "sqlizer-client";
 
+const prisma = new PrismaClient();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure upload directories exist
 const uploadsDir = path.join(__dirname, "uploads");
 const songsDir = path.join(uploadsDir, "songs");
 const thumbnailsDir = path.join(uploadsDir, "thumbnails");
@@ -37,909 +29,398 @@ const thumbnailsDir = path.join(uploadsDir, "thumbnails");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// EJS
-app.use(expressLayouts);
-app.set("layout", "layout");
-app.set("view engine", "ejs");
-
-// Middleware
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || origin.startsWith("http://localhost:")) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.urlencoded({ extended: true }));
-// Parse JSON bodies for API endpoints (used by fetch requests)
 app.use(express.json());
+app.use(fileUpload());
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(fileUpload());
 
-// Session 
-// In test environment, avoid creating a persistent Mongo-backed session store
-const sessionStore = process.env.NODE_ENV === 'test' ? undefined : MongoStore.create({ mongoUrl: process.env.MONGODB_URI });
+const PgSessionStore = pgSession(session);
+const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
 app.use(
   session({
+    store: new PgSessionStore({
+      pool: pgPool,
+      tableName: "session"
+    }),
     secret: process.env.SESSION_SECRET || "soundcloud_secret",
     resave: false,
     saveUninitialized: false,
-    store: sessionStore,
     cookie: { maxAge: 1000 * 60 * 60 },
   })
 );
 
-
-
-// MongoDB
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => {})
-  .catch((err) => {});
-
-
-// Expose user/admin/albums
-app.use(async (req, res, next) => {
-  res.locals.user = req.session.user;
-  res.locals.admin = req.session.admin;
-
-  try {
-    res.locals.albums = await Album.find().populate("songs");
-  } catch {
-    res.locals.albums = [];
-  }
-
-  next();
-});
-
-// Protect routes
 function requireLogin(req, res, next) {
-  if (!req.session.user) return res.redirect("/login");
+  if (!req.session.user) return res.status(401).json({ error: "Unauthorized" });
   next();
 }
 function requireAdmin(req, res, next) {
-  if (!req.session.admin) return res.redirect("/login");
+  if (!req.session.admin) return res.status(401).json({ error: "Unauthorized admin" });
   next();
 }
 
-// ================= LOGIN / REGISTER =================
-app.get("/login", (req, res) => res.render("login", { title: "Login" }));
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+app.get('/api/me', async (req, res) => {
+  if (req.session.user) {
+    if (req.session.admin) {
+      return res.json({ user: req.session.user, isAdmin: true });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.user.id },
+      include: { recentlyPlayed: { include: { song: true }, orderBy: { playedAt: 'desc' }, take: 12 } }
+    });
+    res.json({ user, isAdmin: false });
+  } else {
+    res.json({ user: null });
+  }
+});
 
-  // Admin login
+// AUTH
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body;
   if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
     req.session.admin = true;
-    req.session.user = {
-      username: 'Admin',
-      email: process.env.ADMIN_EMAIL,
-      isAdmin: true
-    };
-    return req.session.save((err) => {
-      if (err) console.error('Session save error:', err);
-      res.redirect("/admin");
-    });
+    req.session.user = { id: "0", username: 'Admin', email: process.env.ADMIN_EMAIL, isAdmin: true };
+    return req.session.save(() => res.json({ success: true, user: req.session.user }));
   }
 
-  // User login
-  const user = await User.findOne({ email });
-  if (!user) {
-    // If the email is not registered, show inline error (no attempt increment)
-    return res.status(200).render("login", {
-      title: "Login",
-      error: "This email address does not exist. Please register first.",
-      email: email || "",
-    });
-  }
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.status(400).json({ error: "Invalid email or password" });
 
-  // If user exists, compare decrypted password using AES encryption
-  let validPassword = false;
   try {
     const decrypted = decrypt(user.password);
-    validPassword = decrypted && decrypted === password;
+    if (decrypted !== password) return res.status(400).json({ error: "Invalid email or password" });
+    
+    req.session.user = { id: user.id, username: user.username, email: user.email };
+    return req.session.save(() => res.json({ success: true, user: req.session.user }));
   } catch (e) {
-    console.warn('Password check error:', e && e.message ? e.message : e);
-    validPassword = false;
+    return res.status(400).json({ error: "Invalid email or password" });
   }
-
-  if (validPassword) {
-    // Store a plain object in session to avoid attaching Mongoose document methods
-    try {
-      req.session.user = {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-      };
-    } catch (e) {
-      req.session.user = user;
-    }
-    // Ensure session is persisted before redirecting to avoid race conditions
-    return req.session.save((err) => {
-      if (err) console.error('Session save after login failed:', err);
-      return res.redirect('/');
-    });
-  }
-
-  // failed login -> show error message
-  return res.status(200).render("login", {
-    title: "Login",
-    error: "Invalid email or password",
-    email: email || "",
-  });
 });
 
-app.get("/register", (req, res) => res.render("register", { title: "Register" }));
-app.post("/register", async (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   const { username, email, password } = req.body;
-  
-  // Validate duplicate email
-  const existingEmail = await User.findOne({ email });
-  if (existingEmail) {
-    return res.status(200).render("register", {
-      title: "Register",
-      error: "This email is already in use — please register with another email.",
-      username: username || "",
-      email: email || "",
-    });
-  }
-
-  // Validate duplicate username
-  const existingUsername = await User.findOne({ username });
-  if (existingUsername) {
-    return res.status(200).render("register", {
-      title: "Register",
-      error: "This username is already taken — please choose another username.",
-      username: username || "",
-      email: email || "",
-    });
-  }
-
-  // Encrypt the password before saving (note: reversible encryption)
-  const encryptedPassword = encrypt(password);
-  const newUser = new User({ username, email, password: encryptedPassword, playlists: [] });
-  
   try {
-    await newUser.save();
-    res.redirect("/login");
-  } catch (err) {
-    // Handle MongoDB duplicate key errors as fallback
-    if (err.code === 11000) {
-      let errorMessage = "Registration failed. This ";
-      if (err.keyPattern?.email) {
-        errorMessage += "email is already in use.";
-      } else if (err.keyPattern?.username) {
-        errorMessage += "username is already taken.";
-      } else {
-        errorMessage += "information is already in use.";
-      }
-      
-      return res.status(200).render("register", {
-        title: "Register",
-        error: errorMessage,
-        username: username || "",
-        email: email || "",
-      });
-    }
-    
-    // Handle other errors
-    console.error("Registration error:", err);
-    return res.status(200).render("register", {
-      title: "Register",
-      error: "Registration failed. Please try again.",
-      username: username || "",
-      email: email || "",
+    const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
+    if (existing) return res.status(400).json({ error: "Email or username already used" });
+
+    const encryptedPassword = encrypt(password);
+    const user = await prisma.user.create({
+      data: { username, email, password: encryptedPassword }
     });
+    res.json({ success: true, user: { id: user.id, username: user.username, email: user.email } });
+  } catch (err) {
+    res.status(500).json({ error: "Registration failed" });
   }
 });
 
-app.get("/logout", (req, res) => req.session.destroy(() => res.redirect("/login")));
-
-// ================= DASHBOARD ROUTES =================
-app.get("/dashboard", requireLogin, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.user._id)
-      .populate({
-        path: 'recentlyPlayed.song',
-        model: 'Song'
-      })
-      .lean();
-    
-    // Sort recently played by date (most recent first) and limit to 12
-    const recentlyPlayed = (user.recentlyPlayed || [])
-      .sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt))
-      .slice(0, 12)
-      .filter(item => item.song); // Filter out any null songs
-
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: user,
-      recentlyPlayed: recentlyPlayed
-    });
-  } catch (err) {
-    console.error("Dashboard error:", err);
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: req.session.user,
-      recentlyPlayed: []
-    });
-  }
+app.post("/api/auth/logout", (req, res) => {
+  req.session.destroy(() => res.json({ success: true }));
 });
 
-app.post("/dashboard/update-username", requireLogin, async (req, res) => {
+// DASHBOARD
+app.post("/api/dashboard/update-username", requireLogin, async (req, res) => {
   const { username } = req.body;
-  
   try {
-    // Check if username is already taken by another user
-    const existingUser = await User.findOne({ username, _id: { $ne: req.session.user._id } });
-    if (existingUser) {
-      const user = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-      const recentlyPlayed = (user.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-      return res.render("dashboard", { 
-        title: "Dashboard", 
-        user: user,
-        recentlyPlayed: recentlyPlayed,
-        error: "Username already taken" 
-      });
-    }
+    const existing = await prisma.user.findFirst({ where: { username, NOT: { id: req.session.user.id } } });
+    if (existing) return res.status(400).json({ error: "Username already taken" });
 
-    // Update username
-    await User.findByIdAndUpdate(req.session.user._id, { username });
+    await prisma.user.update({ where: { id: req.session.user.id }, data: { username } });
     req.session.user.username = username;
-    
-    const user = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-    const recentlyPlayed = (user.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-    
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: user,
-      recentlyPlayed: recentlyPlayed,
-      success: "Username updated successfully" 
-    });
+    res.json({ success: true, user: req.session.user });
   } catch (err) {
-    console.error("Update username error:", err);
-    const user = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-    const recentlyPlayed = (user.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: user,
-      recentlyPlayed: recentlyPlayed,
-      error: "Failed to update username" 
-    });
+    res.status(500).json({ error: "Failed to update" });
   }
 });
-
-app.post("/dashboard/update-password", requireLogin, async (req, res) => {
+app.post("/api/dashboard/update-password", requireLogin, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  
   try {
-    const user = await User.findById(req.session.user._id);
-    const decryptedPassword = decrypt(user.password);
-    
-    // Verify current password
-    if (decryptedPassword !== currentPassword) {
-      const userWithRecent = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-      const recentlyPlayed = (userWithRecent.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-      return res.render("dashboard", { 
-        title: "Dashboard", 
-        user: userWithRecent,
-        recentlyPlayed: recentlyPlayed,
-        error: "Current password is incorrect" 
-      });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.session.user.id } });
+    const decrypted = decrypt(user.password);
+    if (decrypted !== currentPassword) return res.status(400).json({ error: "Current password incorrect" });
 
-    // Update password
     const encryptedPassword = encrypt(newPassword);
-    await User.findByIdAndUpdate(req.session.user._id, { password: encryptedPassword });
-    
-    const userWithRecent = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-    const recentlyPlayed = (userWithRecent.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-    
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: userWithRecent,
-      recentlyPlayed: recentlyPlayed,
-      success: "Password updated successfully" 
-    });
+    await prisma.user.update({ where: { id: req.session.user.id }, data: { password: encryptedPassword } });
+    res.json({ success: true });
   } catch (err) {
-    console.error("Update password error:", err);
-    const userWithRecent = await User.findById(req.session.user._id).populate('recentlyPlayed.song').lean();
-    const recentlyPlayed = (userWithRecent.recentlyPlayed || []).sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt)).slice(0, 12).filter(item => item.song);
-    res.render("dashboard", { 
-      title: "Dashboard", 
-      user: userWithRecent,
-      recentlyPlayed: recentlyPlayed,
-      error: "Failed to update password" 
-    });
+    res.status(500).json({ error: "Failed to update" });
   }
 });
 
-// ================= ADMIN ROUTES =================
-app.get("/admin", requireAdmin, async (req, res) => {
-  const users = await User.find();
-  const albums = await Album.find().populate("songs");
-  const allSongs = await Song.find().sort({ createdAt: -1 });
-  res.render("admin-panel", { title: "Admin Panel", user: req.session.user, users, albums, allSongs, layout: false });
-});
+app.get("/api/search", async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json({ songs: [], albums: [] });
 
-// Create album
-app.get("/admin/albums/create", requireAdmin, (req, res) =>
-  res.render("admin-album-create", { title: "Add Album", user: req.session.user, layout: false })
-);
-app.post("/admin/albums/create", requireAdmin, async (req, res) => {
-  const { name, artist } = req.body;
-  if (!name || !artist) return res.send("Album name and artist required");
-
-  const album = new Album({ name, artist, songs: [] });
-  await album.save();
-  res.redirect("/admin");
-});
-
-// Delete album (with cleanup)
-app.post("/admin/albums/delete/:albumId", requireAdmin, async (req, res) => {
-  const { albumId } = req.params;
-  const album = await Album.findById(albumId).populate("songs");
-  if (!album) return res.send("Album not found");
-
-  for (const song of album.songs) {
-    // Delete files
-    [song.file, song.thumbnail].forEach(filePath => {
-      if (!filePath) return;
-      const fullPath = path.join(__dirname, filePath);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-    });
-
-    // Remove from playlists
-    await User.updateMany(
-      { "playlists.songs": song._id },
-      { $pull: { "playlists.$[].songs": song._id } }
-    );
-
-    await Song.findByIdAndDelete(song._id);
-  }
-
-  await Album.findByIdAndDelete(albumId);
-  res.redirect("/admin");
-});
-
-// Create song
-app.get("/admin/songs/create", requireAdmin, async (req, res) => {
-  const albums = await Album.find();
-  res.render("admin-song-create", { title: "Add Song", user: req.session.user, albums, layout: true, admin: true });
-});
-app.post("/admin/songs/create", requireAdmin, async (req, res) => {
-  const { title, artist, albumId, language } = req.body;
-  if (!title || !artist || !language || !req.files?.audio || !req.files?.thumbnail)
-    return res.send("All fields required");
-
-  const audioFile = req.files.audio;
-  const thumbnailFile = req.files.thumbnail;
-
-  const audioPath = path.join(songsDir, audioFile.name);
-  const thumbnailPath = path.join(thumbnailsDir, thumbnailFile.name);
-
-  await audioFile.mv(audioPath);
-  await thumbnailFile.mv(thumbnailPath);
-
-  const song = new Song({
-    title,
-    artist,
-    file: "/uploads/songs/" + audioFile.name,
-    thumbnail: "/uploads/thumbnails/" + thumbnailFile.name,
-    language,
+  const searchFilter = { contains: q, mode: 'insensitive' };
+  
+  const songs = await prisma.song.findMany({
+    where: {
+      OR: [
+        { title: searchFilter },
+        { artist: searchFilter },
+        { language: searchFilter }
+      ]
+    },
+    include: { album: true }
   });
-  await song.save();
 
-  if (albumId) {
-    try {
-      const album = await Album.findById(albumId);
-      if (album) {
-        album.songs.push(song._id);
-        await album.save();
-      }
-    } catch (e) {
-      console.warn('Could not attach song to album:', e && e.message);
-    }
-  }
-
-  res.redirect("/admin");
-});
-
-// Edit song - render form
-app.get("/admin/songs/edit/:songId", requireAdmin, async (req, res) => {
-  try {
-    const { songId } = req.params;
-    const song = await Song.findById(songId);
-    if (!song) return res.redirect('/admin');
-    res.render('admin-song-edit', { title: 'Edit Song', user: req.session.user, song, layout: true, admin: true });
-  } catch (err) {
-    console.error('Error rendering edit form:', err);
-    res.redirect('/admin');
-  }
-});
-
-// Edit song - handle form submission
-app.post('/admin/songs/edit/:songId', requireAdmin, async (req, res) => {
-  try {
-    const { songId } = req.params;
-    const { title, artist, language } = req.body;
-    const song = await Song.findById(songId);
-    if (!song) return res.redirect('/admin');
-
-    if (title) song.title = title;
-    if (artist) song.artist = artist;
-    if (language) song.language = language;
-
-    // Handle optional file replacements
-    if (req.files && req.files.audio) {
-      const audioFile = req.files.audio;
-      const audioPath = path.join(songsDir, audioFile.name);
-      await audioFile.mv(audioPath);
-      // remove old file if exists
-      if (song.file) {
-        const oldPath = path.join(__dirname, song.file);
-        try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch(e){}
-      }
-      song.file = '/uploads/songs/' + audioFile.name;
-    }
-
-    if (req.files && req.files.thumbnail) {
-      const thumbnailFile = req.files.thumbnail;
-      const thumbPath = path.join(thumbnailsDir, thumbnailFile.name);
-      await thumbnailFile.mv(thumbPath);
-      if (song.thumbnail) {
-        const oldThumb = path.join(__dirname, song.thumbnail);
-        try { if (fs.existsSync(oldThumb)) fs.unlinkSync(oldThumb); } catch(e){}
-      }
-      song.thumbnail = '/uploads/thumbnails/' + thumbnailFile.name;
-    }
-
-    await song.save();
-    res.redirect('/admin');
-  } catch (err) {
-    console.error('Error saving edited song:', err);
-    res.redirect('/admin');
-  }
-});
-
-// Delete song
-app.post("/admin/songs/delete/:songId", requireAdmin, async (req, res) => {
-  const { songId } = req.params;
-  const song = await Song.findById(songId);
-  if (song) {
-    [song.file, song.thumbnail].forEach(filePath => {
-      if (!filePath) return;
-      const fullPath = path.join(__dirname, filePath);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-    });
-
-    await Album.updateMany({ songs: songId }, { $pull: { songs: songId } });
-    await User.updateMany(
-      { "playlists.songs": songId },
-      { $pull: { "playlists.$[].songs": songId } }
-    );
-
-    await Song.findByIdAndDelete(songId);
-  }
-  res.redirect("/admin");
-});
-
-// Remove song from album only
-app.post("/admin/albums/:albumId/remove/:songId", requireAdmin, async (req, res) => {
-  const { albumId, songId } = req.params;
-  const album = await Album.findById(albumId);
-  if (!album) return res.send("Album not found");
-  album.songs.pull(songId);
-  await album.save();
-  res.redirect("/admin");
-});
-
-// Add song to album
-app.post("/admin/albums/:albumId/add-song", requireAdmin, async (req, res) => {
-  const { albumId } = req.params;
-  const { title, artist } = req.body;
-  if (!title || !artist || !req.files?.audio || !req.files?.thumbnail)
-    return res.send("All fields required");
-
-  const audioFile = req.files.audio;
-  const thumbnailFile = req.files.thumbnail;
-
-  const audioPath = path.join(songsDir, audioFile.name);
-  const thumbnailPath = path.join(thumbnailsDir, thumbnailFile.name);
-
-  await audioFile.mv(audioPath);
-  await thumbnailFile.mv(thumbnailPath);
-
-  const song = new Song({
-    title,
-    artist,
-    file: "/uploads/songs/" + audioFile.name,
-    thumbnail: "/uploads/thumbnails/" + thumbnailFile.name,
+  const albums = await prisma.album.findMany({
+    where: {
+      OR: [
+        { name: searchFilter },
+        { artist: searchFilter }
+      ]
+    },
+    include: { songs: true }
   });
-  await song.save();
 
-  const album = await Album.findById(albumId);
-  album.songs.push(song._id);
-  await album.save();
-
-  res.redirect("/admin");
+  res.json({ songs, albums });
 });
 
-// Add existing song to album
-app.post("/admin/songs/:songId/add-to-album/:albumId", requireAdmin, async (req, res) => {
-  try {
-    const { songId, albumId } = req.params;
-    const album = await Album.findById(albumId);
-    if (!album) return res.status(404).send("Album not found");
-    
-    if (!album.songs.includes(songId)) {
-      album.songs.push(songId);
-      await album.save();
-    }
-    res.redirect("/admin");
-  } catch (err) {
-    console.error("Error adding song to album:", err);
-    res.status(500).send("Error adding song to album: " + err.message);
-  }
+// PUBLIC DATA
+app.get("/api/songs", async (req, res) => {
+  const { lang } = req.query;
+  const where = lang ? { language: lang } : {};
+  let songs = await prisma.song.findMany({ where, orderBy: { createdAt: 'desc' }, include: { album: true } });
+  // Shuffle songs
+  songs = songs.sort(() => Math.random() - 0.5);
+  res.json({ songs });
 });
 
-// ================= USER ROUTES =================
+app.get("/api/home", async (req, res) => {
+  const bestHindi = await prisma.song.findMany({ where: { language: 'Hindi' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
+  const bestPunjabi = await prisma.song.findMany({ where: { language: 'Punjabi' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
+  const bestEnglish = await prisma.song.findMany({ where: { language: 'English' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
+  const albums = await prisma.album.findMany({ include: { songs: true } });
+  res.json({ bestHindi, bestPunjabi, bestEnglish, albums });
+});
 
-app.get("/", requireLogin, async (req, res) => {
-  const albums = await Album.find().populate("songs");
-
-  // language filter support
-  const selectedLang = req.query.lang || '';
-
-  // Get ALL songs - sort by creation date first
-  let allSongsQuery = {};
-  if (selectedLang) {
-    allSongsQuery.language = selectedLang;
-  }
-  let allSongs = await Song.find(allSongsQuery).sort({ createdAt: -1 });
-
-  // Remove duplicates by ID (in case same song exists multiple times)
-  const uniqueSongs = [];
-  const seenIds = new Set();
-  for (const song of allSongs) {
-    const id = song._id.toString();
-    if (!seenIds.has(id)) {
-      seenIds.add(id);
-      uniqueSongs.push(song);
-    }
-  }
-
-  // Shuffle the unique songs array
-  const songs = uniqueSongs.sort(() => Math.random() - 0.5);
-
-  // Charts: Top 5 by language (latest for now)
-  const bestHindi = await Song.find({ language: "Hindi" }).sort({ createdAt: -1 }).limit(5);
-  const bestPunjabi = await Song.find({ language: "Punjabi" }).sort({ createdAt: -1 }).limit(5);
-  const bestEnglish = await Song.find({ language: "English" }).sort({ createdAt: -1 }).limit(5);
-
-  res.render("index", {
-    title: "SoundCloud",
-    songs,
-    albums,
-    bestHindi: bestHindi || [],
-    bestPunjabi: bestPunjabi || [],
-    bestEnglish: bestEnglish || []
-    , selectedLang: selectedLang
+// PLAYLISTS
+app.get("/api/playlists", requireLogin, async (req, res) => {
+  const playlists = await prisma.playlist.findMany({ 
+    where: { userId: req.session.user.id },
+    include: { songs: true }
   });
+  res.json({ playlists });
 });
-
-// Playlists
-app.post("/playlists", requireLogin, async (req, res) => {
+app.post("/api/playlists", requireLogin, async (req, res) => {
   const { name } = req.body;
-  if (!name) return res.send("Playlist name required");
-
-  try {
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.send("User not found");
-    
-    user.playlists.push({ name, songs: [] });
-    await user.save();
-    res.redirect("/playlists");
-  } catch (err) {
-    console.error("Error creating playlist:", err);
-    res.status(500).send("Error creating playlist: " + err.message);
-  }
-});
-
-app.get("/playlists", requireLogin, async (req, res) => {
-  const user = await User.findById(req.session.user._id);
-  const songs = await Song.find();
-  const playlistsWithSongs = user.playlists.map((pl) => ({
-    _id: pl._id,
-    name: pl.name,
-    songs: pl.songs
-      .map((songId) => songs.find((s) => s._id.toString() === songId.toString()))
-      .filter(song => song != null), // Filter out undefined songs
-  }));
-  res.render("playlists", { title: "Your Playlists", playlists: playlistsWithSongs, songs });
-});
-
-app.get("/playlists/view/:playlistId", requireLogin, async (req, res) => {
-  const { playlistId } = req.params;
-  const user = await User.findById(req.session.user._id);
-  const playlist = user.playlists.id(playlistId);
-  if (!playlist) return res.send("Playlist not found");
-
-  const songs = await Song.find();
-  const playlistSongs = playlist.songs.map((songId) =>
-    songs.find((s) => s._id.toString() === songId.toString())
-  );
-  res.render("playlist-view", {
-    title: playlist.name,
-    playlist: { _id: playlist._id, name: playlist.name, songs: playlistSongs },
-    songs,
+  if (!name) return res.status(400).json({ error: "Name required" });
+  const playlist = await prisma.playlist.create({
+    data: { name, userId: req.session.user.id }
   });
+  res.json({ success: true, playlist });
 });
-
-app.post("/playlists/:playlistId/add/:songId", requireLogin, async (req, res) => {
-  const { playlistId, songId } = req.params;
+app.post("/api/playlists/:playlistId/add/:songId", requireLogin, async (req, res) => {
   try {
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.send("User not found");
-    
-    const playlist = user.playlists.id(playlistId);
-    if (!playlist) return res.send("Playlist not found");
-    
-    if (!playlist.songs.includes(songId)) playlist.songs.push(songId);
-    await user.save();
-    res.redirect("/playlists/view/" + playlistId);
-  } catch (err) {
-    console.error("Error adding song to playlist:", err);
-    res.status(500).send("Error adding song: " + err.message);
-  }
-});
-
-app.post("/playlists/:playlistId/remove/:songId", requireLogin, async (req, res) => {
-  const { playlistId, songId } = req.params;
-  try {
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.send("User not found");
-    
-    const playlist = user.playlists.id(playlistId);
-    if (!playlist) return res.send("Playlist not found");
-    
-    playlist.songs.pull(songId);
-    await user.save();
-    res.redirect("/playlists/view/" + playlistId);
-  } catch (err) {
-    console.error("Error removing song from playlist:", err);
-    res.status(500).send("Error removing song: " + err.message);
-  }
-});
-
-// Delete entire playlist
-app.post("/playlists/:playlistId/delete", requireLogin, async (req, res) => {
-  const { playlistId } = req.params;
-  try {
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.send("User not found");
-    
-    user.playlists.pull(playlistId);
-    await user.save();
-    res.redirect("/playlists");
-  } catch (err) {
-    console.error("Error deleting playlist:", err);
-    res.status(500).send("Error deleting playlist: " + err.message);
-  }
-});
-
-// ================= FAVORITES =================
-app.get("/favorites", requireLogin, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.user._id).populate('favorites');
-    if (!user) return res.redirect('/login');
-    
-    // Initialize favorites if it doesn't exist
-    if (!user.favorites) {
-      user.favorites = [];
-      await user.save();
-      req.session.user = user;
-    }
-    
-    res.render("favorites", { 
-      title: "My Favorites", 
-      favorites: user.favorites || []
+    const { playlistId, songId } = req.params;
+    await prisma.playlist.update({
+      where: { id: playlistId, userId: req.session.user.id },
+      data: { songs: { connect: { id: songId } } }
     });
-  } catch (error) {
-    console.error('Favorites page error:', error);
-    res.render("favorites", { title: "My Favorites", favorites: [] });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
-
-app.post("/favorites/add/:songId", requireLogin, async (req, res) => {
+app.post("/api/playlists/:playlistId/remove/:songId", requireLogin, async (req, res) => {
   try {
-    const user = await User.findById(req.session.user._id);
-    const songId = req.params.songId;
-    
-    // Initialize favorites if it doesn't exist
-    if (!user.favorites) {
-      user.favorites = [];
-    }
-    
-    // Check if already in favorites
-    if (!user.favorites.includes(songId)) {
-      user.favorites.push(songId);
-      await user.save();
-      req.session.user = user;
-    }
-    
-    // Return JSON for AJAX requests
-    if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-      return res.json({ success: true, favorites: user.favorites });
-    }
-    
-    res.redirect('back');
-  } catch (error) {
-    console.error(error);
-    if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-      return res.status(500).json({ success: false, error: 'Failed to add to favorites' });
-    }
-    res.redirect('back');
-  }
-});
-
-app.post("/favorites/remove/:songId", requireLogin, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.user._id);
-    const songId = req.params.songId;
-    
-    // Initialize favorites if it doesn't exist
-    if (!user.favorites) {
-      user.favorites = [];
-    }
-    
-    user.favorites = user.favorites.filter(f => f.toString() !== songId);
-    await user.save();
-    req.session.user = user;
-    
-    // Return JSON for AJAX requests
-    if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-      return res.json({ success: true, favorites: user.favorites });
-    }
-    
-    res.redirect('back');
-  } catch (error) {
-    console.error(error);
-    if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-      return res.status(500).json({ success: false, error: 'Failed to remove from favorites' });
-    }
-    res.redirect('back');
-  }
-});
-
-// API endpoints for AJAX requests
-app.get("/api/user/favorites", requireLogin, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json({ favorites: user.favorites || [] });
-  } catch (err) {
-    res.status(500).json({ error: "Error fetching favorites" });
-  }
-});
-
-// Dashboard stats API for live updates
-app.get('/api/dashboard-stats', requireLogin, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.user._id).lean();
-    const recentlyPlayed = (user.recentlyPlayed || [])
-      .sort((a, b) => new Date(b.playedAt) - new Date(a.playedAt))
-      .slice(0, 12)
-      .filter(item => item.song);
-
-    const playlistsCount = (user.playlists || []).length;
-    const favoritesCount = (user.favorites || []).length;
-
-    // Populate song details for recentlyPlayed items
-    const songIds = recentlyPlayed.map(rp => rp.song);
-    const songs = await Song.find({ _id: { $in: songIds } }).lean();
-    const songMap = new Map(songs.map(s => [s._id.toString(), s]));
-
-    const rp = recentlyPlayed.map(item => ({
-      song: songMap.get(item.song.toString()) || null,
-      playedAt: item.playedAt
-    })).filter(x => x.song);
-
-    res.json({
-      playlistsCount,
-      favoritesCount,
-      recentlyPlayed: rp
+    const { playlistId, songId } = req.params;
+    await prisma.playlist.update({
+      where: { id: playlistId, userId: req.session.user.id },
+      data: { songs: { disconnect: { id: songId } } }
     });
-  } catch (err) {
-    console.error('Error in /api/dashboard-stats:', err);
-    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
-
-// Record recently played
-app.post('/api/recently-played', requireLogin, async (req, res) => {
+app.delete("/api/playlists/:playlistId", requireLogin, async (req, res) => {
   try {
-    const songId = req.body && req.body.songId ? req.body.songId : null;
-    if (!songId) return res.status(400).json({ error: 'songId required' });
-
-    const user = await User.findById(req.session.user._id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // Remove existing entry for same song (if present)
-    user.recentlyPlayed = (user.recentlyPlayed || []).filter(rp => rp.song.toString() !== songId.toString());
-
-    // Add to front
-    user.recentlyPlayed.unshift({ song: songId, playedAt: new Date() });
-
-    // Keep only latest 50 entries
-    if (user.recentlyPlayed.length > 50) user.recentlyPlayed = user.recentlyPlayed.slice(0, 50);
-
-    await user.save();
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('Error recording recently played:', err);
-    res.status(500).json({ error: 'Failed to record recently played' });
+    await prisma.playlist.delete({ where: { id: req.params.playlistId, userId: req.session.user.id } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-app.get("/api/song/:id", requireLogin, async (req, res) => {
-  try {
-    const song = await Song.findById(req.params.id);
-    if (!song) return res.status(404).json({ error: "Song not found" });
-    res.json(song);
-  } catch (err) {
-    res.status(500).json({ error: "Error fetching song" });
-  }
-});
-
-app.get("/api/songs", requireLogin, async (req, res) => {
-  try {
-    const songs = await Song.find().sort({ createdAt: -1 });
-    res.json(songs);
-  } catch (err) {
-    res.status(500).json({ error: "Error fetching songs" });
-  }
-});
-
-// Player
-app.get("/player/:id", requireLogin, async (req, res) => {
-  const song = await Song.findById(req.params.id);
-  if (!song) return res.send("Song not found");
-  const songs = await Song.find();
-  res.render("player", { 
-    title: song.title, 
-    song, 
-    songs,
-    user: req.session.user,
-    layout: false 
+// FAVORITES
+app.get("/api/favorites", requireLogin, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.session.user.id },
+    include: { favorites: true }
   });
+  res.json({ favorites: user.favorites });
 });
-
-// Search
-app.get("/search", requireLogin, async (req, res) => {
-  const query = req.query.q;
-  let songs;
-  if (typeof query === 'undefined' || query === null) {
-    songs = await Song.find(); // Show all songs if no query param
-  } else if (query === "") {
-    songs = await Song.find(); // Show all songs if query is empty string
-  } else {
-    songs = await Song.find({ title: { $regex: query, $options: "i" } });
+app.post("/api/favorites/add/:songId", requireLogin, async (req, res) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.session.user.id },
+      data: { favorites: { connect: { id: req.params.songId } } }
+    });
+    const user = await prisma.user.findUnique({ where: { id: req.session.user.id }, include: { favorites: true } });
+    res.json({ success: true, favorites: user.favorites.map(f => f.id) });
+  } catch (e) {
+    res.status(500).json({ success: false });
   }
-  res.render("search", { title: `Search: ${query || ''}` , songs });
+});
+app.post("/api/favorites/remove/:songId", requireLogin, async (req, res) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.session.user.id },
+      data: { favorites: { disconnect: { id: req.params.songId } } }
+    });
+    const user = await prisma.user.findUnique({ where: { id: req.session.user.id }, include: { favorites: true } });
+    res.json({ success: true, favorites: user.favorites.map(f => f.id) });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
 });
 
-// Album view
-app.get("/album/:id", requireLogin, async (req, res) => {
-  const album = await Album.findById(req.params.id).populate("songs");
-  if (!album) return res.send("Album not found");
-  res.render("album-view", { 
-    title: album.name, 
-    album,
-    user: req.session.user,
-    layout: false 
+app.post("/api/history/add/:songId", requireLogin, async (req, res) => {
+    try {
+        await prisma.recentlyPlayed.create({
+            data: {
+                userId: req.session.user.id,
+                songId: req.params.songId
+            }
+        });
+        res.json({ success: true });
+    } catch(e) {
+        res.status(500).json({ success: false });
+    }
+});
+
+// ADMIN
+app.get("/api/admin/data", requireAdmin, async (req, res) => {
+  const users = await prisma.user.findMany();
+  const albums = await prisma.album.findMany({ include: { songs: true } });
+  const allSongs = await prisma.song.findMany({ orderBy: { createdAt: 'desc' } });
+  res.json({ users, albums, allSongs });
+});
+
+app.post("/api/admin/albums", requireAdmin, async (req, res) => {
+  const { name, artist } = req.body;
+  const album = await prisma.album.create({ data: { name, artist } });
+  res.json({ success: true, album });
+});
+app.delete("/api/admin/albums/:albumId", requireAdmin, async (req, res) => {
+  const album = await prisma.album.findUnique({ where: { id: req.params.albumId }, include: { songs: true } });
+  if (album) {
+    for (const song of album.songs) {
+      if (song.file) try { fs.unlinkSync(path.join(__dirname, song.file)); } catch(e){}
+      if (song.thumbnail) try { fs.unlinkSync(path.join(__dirname, song.thumbnail)); } catch(e){}
+    }
+  }
+  await prisma.song.deleteMany({ where: { albumId: req.params.albumId } });
+  await prisma.album.delete({ where: { id: req.params.albumId } });
+  res.json({ success: true });
+});
+
+app.post("/api/admin/songs", requireAdmin, async (req, res) => {
+  const { title, artist, albumId, language } = req.body;
+  if (!title || !artist || !req.files?.audio || !req.files?.thumbnail)
+    return res.status(400).json({ error: "All fields required" });
+
+  const audioFile = req.files.audio;
+  const thumbnailFile = req.files.thumbnail;
+
+  const audioPath = path.join(songsDir, audioFile.name);
+  const thumbnailPath = path.join(thumbnailsDir, thumbnailFile.name);
+
+  await audioFile.mv(audioPath);
+  await thumbnailFile.mv(thumbnailPath);
+
+  const data = {
+    title, artist, language,
+    file: "/uploads/songs/" + audioFile.name,
+    thumbnail: "/uploads/thumbnails/" + thumbnailFile.name
+  };
+  if (albumId && albumId !== "none") data.albumId = albumId;
+  const song = await prisma.song.create({ data });
+  res.json({ success: true, song });
+});
+app.put("/api/admin/songs/:songId", requireAdmin, async (req, res) => {
+  const { title, artist, language } = req.body;
+  let data = { title, artist, language };
+
+  const old = await prisma.song.findUnique({ where: { id: req.params.songId } });
+  if (req.files?.audio) {
+    await req.files.audio.mv(path.join(songsDir, req.files.audio.name));
+    if (old.file) try { fs.unlinkSync(path.join(__dirname, old.file)); } catch(e){}
+    data.file = "/uploads/songs/" + req.files.audio.name;
+  }
+  if (req.files?.thumbnail) {
+    await req.files.thumbnail.mv(path.join(thumbnailsDir, req.files.thumbnail.name));
+    if (old.thumbnail) try { fs.unlinkSync(path.join(__dirname, old.thumbnail)); } catch(e){}
+    data.thumbnail = "/uploads/thumbnails/" + req.files.thumbnail.name;
+  }
+
+  const song = await prisma.song.update({ where: { id: req.params.songId }, data });
+  res.json({ success: true, song });
+});
+app.delete("/api/admin/songs/:songId", requireAdmin, async (req, res) => {
+  const song = await prisma.song.findUnique({ where: { id: req.params.songId } });
+  if (song) {
+    if (song.file) try { fs.unlinkSync(path.join(__dirname, song.file)); } catch(e){}
+    if (song.thumbnail) try { fs.unlinkSync(path.join(__dirname, song.thumbnail)); } catch(e){}
+    await prisma.song.delete({ where: { id: req.params.songId } });
+  }
+  res.json({ success: true });
+});
+
+app.post("/api/admin/albums/:albumId/add/:songId", requireAdmin, async (req, res) => {
+  await prisma.song.update({
+    where: { id: req.params.songId },
+    data: { albumId: req.params.albumId }
   });
+  res.json({ success: true });
+});
+app.post("/api/admin/albums/:albumId/remove/:songId", requireAdmin, async (req, res) => {
+  await prisma.song.update({
+    where: { id: req.params.songId },
+    data: { albumId: null }
+  });
+  res.json({ success: true });
 });
 
-// Start server
+// SQLIZER BULK IMPORT
+app.post("/api/admin/sqlizer-import", requireAdmin, async (req, res) => {
+  if (!req.files || !req.files.file) return res.status(400).json({ error: "No file provided" });
+  const file = req.files.file;
+  const tempPath = path.join(__dirname, "uploads", file.name);
+  await file.mv(tempPath);
 
+  try {
+    // SQLizer configuration
+    const sqlizer = new SQLizerFile({
+      ApiKey: process.env.SQLIZER_API_KEY || "dummy_key",
+      File: tempPath,
+      FileType: file.name.endsWith('.json') ? 'JSON' : 'CSV',
+      DatabaseType: 'PostgreSQL',
+      TableName: 'Song', // Default
+    });
 
+    const sqlUrl = await sqlizer.convert();
+    console.log("SQLizer converted file URL:", sqlUrl);
 
-if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, () => {});
-}
+    // cleanup
+    fs.unlinkSync(tempPath);
 
-export default app;
+    res.json({ success: true, message: "Started SQLizer conversion", url: sqlUrl });
+  } catch (err) {
+    res.status(500).json({ error: "Failed SQLizer import", details: err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`Server API running on port ${PORT}`));
