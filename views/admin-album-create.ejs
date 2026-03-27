@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title || 'Add Album' %> - Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+<div class="admin-modern-container">
+  <div class="admin-modern-card">
+    <div class="card-header">
+      <div class="header-icon">
+        <i class="fas fa-compact-disc"></i>
+      </div>
+      <h1 class="card-title">Create New Album</h1>
+      <p class="card-subtitle">Add a new album to organize your tracks</p>
+    </div>
+
+    <form action="/admin/albums/create" method="POST" class="modern-form">
+      <div class="form-group">
+        <label class="form-label">
+          <i class="fas fa-album"></i>
+          Album Name
+        </label>
+        <input type="text" name="name" placeholder="Enter album name" required class="modern-input">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          <i class="fas fa-user-music"></i>
+          Artist Name
+        </label>
+        <input type="text" name="artist" placeholder="Enter artist name" required class="modern-input">
+      </div>
+
+      <div class="form-actions">
+        <a href="/admin" class="btn-secondary">
+          <i class="fas fa-arrow-left"></i>
+          Back to Admin
+        </a>
+        <button type="submit" class="btn-primary">
+          <i class="fas fa-plus-circle"></i>
+          Create Album
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+    min-height: 100vh;
+  }
+
+  .admin-modern-container {
+    min-height: 100vh;
+    padding: 40px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-modern-card {
+    width: 100%;
+    max-width: 600px;
+    background: var(--bg-secondary, #12121f);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  .card-header {
+    padding: 48px 48px 32px;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .header-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 20px;
+    font-size: 36px;
+    color: white;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  }
+
+  .card-title {
+    margin: 0 0 12px 0;
+    font-size: 32px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .card-subtitle {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-muted, #a0a0c0);
+  }
+
+  .modern-form {
+    padding: 48px;
+  }
+
+  .form-group {
+    margin-bottom: 24px;
+  }
+
+  .form-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary, #e0e0ff);
+    margin-bottom: 12px;
+  }
+
+  .form-label i {
+    color: #667eea;
+    font-size: 16px;
+  }
+
+  .modern-input {
+    width: 100%;
+    padding: 16px 20px;
+    background: var(--bg-tertiary, #1a1a2e);
+    border: 2px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    color: var(--text-primary, #ffffff);
+    font-size: 15px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+  }
+
+  .modern-input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: var(--bg-secondary, #12121f);
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  }
+
+  .modern-input::placeholder {
+    color: var(--text-dim, #707090);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 40px;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px 32px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary, #e0e0ff);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  @media (max-width: 768px) {
+    .card-header {
+      padding: 32px 24px 24px;
+    }
+
+    .modern-form {
+      padding: 32px 24px;
+    }
+
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .header-icon {
+      width: 64px;
+      height: 64px;
+      font-size: 28px;
+    }
+
+    .card-title {
+      font-size: 24px;
+    }
+  }
+</style>
+</body>
+</html>

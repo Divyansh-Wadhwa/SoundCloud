@@ -1,0 +1,977 @@
+<div class="playlist-view-page">
+  <div id="playlistQueueData" data-queue='<%- JSON.stringify(playlist.songs || []) %>' style="display:none"></div>
+  <!-- Hero Header with Playlist Info -->
+  <div class="playlist-hero">
+    <div class="hero-background">
+      <% if (playlist.songs && playlist.songs.length > 0 && playlist.songs[0].thumbnail) { %>
+        <img src="<%= playlist.songs[0].thumbnail %>" alt="<%= playlist.name %>" class="hero-bg-image">
+      <% } %>
+      <div class="hero-gradient"></div>
+    </div>
+    
+    <div class="hero-content-wrapper">
+      <div class="hero-main">
+        <div class="playlist-left-section">
+          <div class="playlist-cover-large">
+            <% if (playlist.songs && playlist.songs.length > 0 && playlist.songs[0].thumbnail) { %>
+              <img src="<%= playlist.songs[0].thumbnail %>" alt="<%= playlist.name %>">
+            <% } else { %>
+              <div class="cover-placeholder-large">
+                <i class="fas fa-music"></i>
+              </div>
+            <% } %>
+          </div>
+          <a href="/playlists" class="btn-back">
+            <i class="fas fa-arrow-left"></i>
+            <span>Back</span>
+          </a>
+        </div>
+        
+        <div class="playlist-details">
+          <span class="playlist-badge">PLAYLIST</span>
+          <h1 class="playlist-name-hero"><%= playlist.name %></h1>
+          <div class="playlist-stats">
+            <span class="stat-item">
+              <i class="fas fa-music"></i>
+              <%= playlist.songs ? playlist.songs.length : 0 %> <%= playlist.songs && playlist.songs.length === 1 ? 'song' : 'songs' %>
+            </span>
+          </div>
+          
+          <div class="hero-actions">
+            <% if (playlist.songs && playlist.songs.length > 0) { %>
+              <button class="btn-play-all" id="playAllBtn">
+                <i class="fas fa-play"></i>
+                <span>Play All</span>
+              </button>
+            <% } %>
+            <a href="#addSongsSection" class="btn-add-songs">
+              <i class="fas fa-plus"></i>
+              <span>Add Songs</span>
+            </a>
+              <form action="/playlists/<%= playlist._id %>/delete" method="POST" style="display:inline;">
+                <button type="button" class="btn-delete" data-playlist-name="<%- JSON.stringify(playlist.name) %>">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Songs List -->
+  <% if (playlist.songs && playlist.songs.length > 0) { %>
+    <div class="songs-section">
+      <div class="songs-header">
+        <div class="col-number">#</div>
+        <div class="col-title">Title</div>
+        <div class="col-artist">Artist</div>
+        <div class="col-actions"></div>
+      </div>
+      
+      <div class="songs-list">
+        <% playlist.songs.forEach((song, idx) => { %>
+          <div class="song-row fade-in" data-idx="<%= idx %>" data-song-id="<%= song._id %>" data-delay="<%= (idx * 0.03) %>">
+            <div class="col-number">
+              <span class="song-number"><%= idx + 1 %></span>
+              <button class="play-icon" data-idx="<%= idx %>">
+                <i class="fas fa-play"></i>
+              </button>
+            </div>
+            
+            <div class="col-title">
+              <img src="<%= song.thumbnail || song.cover || '/images/default-cover.png' %>" alt="<%= song.title %>" class="song-thumbnail">
+              <div class="song-title-info">
+                <div class="song-title-text"><%= song.title %></div>
+              </div>
+            </div>
+            
+            <div class="col-artist">
+              <span class="song-artist-text"><%= song.artist %></span>
+            </div>
+            
+            <div class="col-actions">
+              <form action="/playlists/<%= playlist._id %>/remove/<%= song._id %>" method="POST" style="display:inline;">
+                <button type="submit" class="btn-remove" title="Remove from playlist">
+                  <i class="fas fa-times"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="empty-playlist-state">
+      <div class="empty-icon-large">
+        <i class="fas fa-music"></i>
+      </div>
+      <h3 class="empty-title-large">Your playlist is empty</h3>
+      <p class="empty-message-large">Add some songs below to start building your perfect soundtrack</p>
+      <a href="#addSongsSection" class="btn-add-first">
+        <i class="fas fa-plus"></i>
+        Add Your First Song
+      </a>
+    </div>
+  <% } %>
+
+  <!-- Add Songs Section -->
+  <section id="addSongsSection" class="add-songs-section">
+    <h2 class="section-title">
+      <i class="fas fa-plus-circle"></i>
+      Add More Songs
+    </h2>
+    
+    <% if (songs && songs.length > 0) { %>
+      <div class="available-songs-grid">
+           <% songs.forEach((song, idx) => { 
+             const alreadyAdded = (playlist.songs || []).find(s => s._id.toString() === song._id.toString());
+             if(!alreadyAdded){ %>
+          <div class="available-song-card fade-in" data-delay="<%= (idx * 0.02) %>">
+            <div class="available-song-cover">
+              <img src="<%= song.thumbnail || '/images/default-cover.png' %>" alt="<%= song.title %>">
+              <div class="cover-overlay-add">
+                <button class="preview-btn" data-file=<%- JSON.stringify(song.file) %> data-title=<%- JSON.stringify(song.title) %> data-artist=<%- JSON.stringify(song.artist) %> data-thumb=<%- JSON.stringify(song.thumbnail || '/images/default-cover.png') %>>
+                  <i class="fas fa-play"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="available-song-info">
+              <h4 class="available-song-title"><%= song.title %></h4>
+              <p class="available-song-artist"><%= song.artist %></p>
+              
+              <form action="/playlists/<%= playlist._id %>/add/<%= song._id %>" method="POST">
+                <button type="submit" class="btn-add-to-playlist">
+                  <i class="fas fa-plus"></i>
+                  Add to Playlist
+                </button>
+              </form>
+            </div>
+          </div>
+        <% } %>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <p class="no-more-songs">All available songs have been added to this playlist!</p>
+    <% } %>
+  </section>
+</div>
+
+<style>
+
+  /* Hero Section */
+  .playlist-hero {
+    position: relative;
+    min-height: 250px;
+    padding: 32px 32px 8px 32px;
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+
+  .hero-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+  }
+
+  .hero-bg-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(50px);
+    transform: scale(1.2);
+    opacity: 0.3;
+  }
+
+  .hero-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, 
+      rgba(11, 11, 12, 0.7) 0%,
+      rgba(11, 11, 12, 0.9) 50%,
+      var(--bg-main) 100%
+    );
+  }
+
+  .hero-content-wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+  }
+
+  .btn-back:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateX(-4px);
+  }
+
+  .hero-main {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+  }
+
+  .playlist-left-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .playlist-cover-large {
+    width: 200px;
+    height: 200px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    flex-shrink: 0;
+  }
+
+  .playlist-cover-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cover-placeholder-large {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .playlist-details {
+    flex: 1;
+    padding-bottom: 6px;
+  }
+
+  .playlist-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    background: rgba(102, 126, 234, 0.2);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #667eea;
+    margin-bottom: 8px;
+  }
+
+  .playlist-name-hero {
+    font-size: 48px;
+    font-weight: 900;
+    margin: 0 0 12px 0;
+    color: #ffffff;
+    line-height: 1.1;
+  }
+
+  .playlist-stats {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 600;
+  }
+
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-play-all {
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border: none;
+    padding: 16px 48px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  }
+
+  .btn-play-all:hover {
+    transform: scale(1.05);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  }
+
+  .btn-play-all i {
+    font-size: 18px;
+  }
+
+  .btn-add-songs {
+    padding: 16px 32px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-add-songs:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .btn-delete {
+    width: 56px;
+    height: 56px;
+    background: rgba(255, 107, 107, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: 50%;
+    color: #ff6b6b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.3s ease;
+    margin-left: 90%;
+  }
+
+  .btn-delete:hover {
+    background: rgba(255, 107, 107, 0.3);
+    transform: scale(1.1);
+  }
+
+  /* Songs List */
+  .songs-section {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+
+  .songs-header {
+    display: grid;
+    grid-template-columns: 60px 1fr 200px 80px;
+    gap: 16px;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .songs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+  }
+
+  .song-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 200px 80px;
+    gap: 8px;
+    padding: 0px 16px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    min-height: 48px;
+  }
+
+  .song-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .col-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .song-number {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .play-icon {
+    position: absolute;
+    opacity: 0;
+    background: var(--primary-gradient);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+  }
+
+  .song-row:hover .song-number {
+    opacity: 0;
+  }
+
+  .song-row:hover .play-icon {
+    opacity: 1;
+  }
+
+  .play-icon:hover {
+    transform: scale(1.1);
+  }
+
+  .col-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .song-thumbnail {
+    width: 55px;
+    height: 55px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .song-title-info {
+    min-width: 0;
+  }
+
+  .song-title-text {
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  .col-artist {
+    color: var(--text-muted);
+  }
+
+  .song-artist-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  .col-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .btn-remove {
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: 50%;
+    color: #ff6b6b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s ease;
+  }
+
+  .song-row:hover .btn-remove {
+    opacity: 1;
+  }
+
+  .btn-remove:hover {
+    background: rgba(255, 107, 107, 0.2);
+    transform: scale(1.1);
+  }
+
+  /* Empty State */
+  .empty-playlist-state {
+    max-width: 600px;
+    margin: 80px auto;
+    text-align: center;
+    padding: 60px 40px;
+  }
+
+  .empty-icon-large {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 32px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: rgba(102, 126, 234, 0.5);
+  }
+
+  .empty-title-large {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .empty-message-large {
+    font-size: 16px;
+    color: var(--text-muted);
+    margin: 0 0 32px 0;
+  }
+
+  .btn-add-first {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  }
+
+  .btn-add-first:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  }
+
+  /* Add Songs Section */
+  .add-songs-section {
+    max-width: 1600px;
+    margin: 80px auto 0;
+    padding: 0 40px;
+  }
+
+  .section-title {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0 0 32px 0;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title i {
+    color: #667eea;
+  }
+
+  .available-songs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 24px;
+  }
+
+  .available-song-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(102, 126, 234, 0.1);
+  }
+
+  .available-song-card:hover {
+    transform: translateY(-8px);
+    border-color: rgba(102, 126, 234, 0.3);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
+  }
+
+  .available-song-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+  }
+
+  .available-song-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .available-song-card:hover .available-song-cover img {
+    transform: scale(1.1);
+  }
+
+  .cover-overlay-add {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .available-song-card:hover .cover-overlay-add {
+    opacity: 1;
+  }
+
+  .preview-btn {
+    width: 56px;
+    height: 56px;
+    background: var(--primary-gradient);
+    border: none;
+    border-radius: 50%;
+    color: #ffffff;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
+  }
+
+  .preview-btn:hover {
+    transform: scale(1.1);
+  }
+
+  .available-song-info {
+    padding: 16px;
+  }
+
+  .available-song-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 6px 0;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .available-song-artist {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 16px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .btn-add-to-playlist {
+    width: 100%;
+    background: rgba(102, 126, 234, 0.1);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    color: #667eea;
+    padding: 10px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-add-to-playlist:hover {
+    background: rgba(102, 126, 234, 0.2);
+    border-color: rgba(102, 126, 234, 0.5);
+  }
+
+  .no-more-songs {
+    text-align: center;
+    padding: 60px 40px;
+    color: var(--text-muted);
+    font-size: 16px;
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 2px dashed rgba(102, 126, 234, 0.2);
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .songs-header,
+    .song-row {
+      grid-template-columns: 60px 1fr 150px 60px;
+    }
+
+    .available-songs-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+  }
+
+  @media (max-width: 768px) {
+    .playlist-hero {
+      padding: 24px;
+    }
+
+    .hero-main {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .playlist-cover-large {
+      width: 200px;
+      height: 200px;
+    }
+
+    .playlist-name-hero {
+      font-size: 36px;
+    }
+
+    .hero-actions {
+      width: 100%;
+    }
+
+    .btn-play-all {
+      flex: 1;
+      justify-content: center;
+    }
+
+    .songs-section,
+    .add-songs-section {
+      padding: 0 24px;
+    }
+
+    .songs-header {
+      display: none;
+    }
+
+    .song-row {
+      grid-template-columns: 1fr 60px;
+      gap: 12px;
+    }
+
+    .col-number,
+    .col-artist {
+      display: none;
+    }
+
+    .col-title {
+      grid-column: 1;
+    }
+
+    .col-actions {
+      grid-column: 2;
+    }
+
+    .btn-remove {
+      opacity: 1;
+    }
+
+    .available-songs-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 16px;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+    opacity: 0;
+  }
+</style>
+
+  <script>
+    (function(){
+      // Build playlist queue from server-rendered data attribute (avoids inline EJS in script)
+      const _rawQueue = (function(){
+        try {
+          const el = document.getElementById('playlistQueueData');
+          return el && el.dataset && el.dataset.queue ? JSON.parse(el.dataset.queue) : [];
+        } catch(e){ return []; }
+      })();
+      const playlistQueue = Array.isArray(_rawQueue) ? _rawQueue.map(s => ({ 
+        id: s._id ? s._id.toString() : (s.id ? s.id.toString() : null),
+        file: s.file, 
+        title: s.title, 
+        artist: s.artist, 
+        thumbnail: s.thumbnail || s.cover || '/images/default-cover.png' 
+      })) : [];
+
+      // Helper: run callback when global player is available
+      function whenGlobalReady(cb){
+        if(typeof window.playSongInBottomBar !== 'undefined') return cb();
+        const handler = function(){ 
+          window.removeEventListener('globalPlayerReady', handler); 
+          cb(); 
+        };
+        window.addEventListener('globalPlayerReady', handler);
+      }
+
+      // Play All button - plays first song and sets queue
+      const playAllBtn = document.getElementById('playAllBtn');
+      if(playAllBtn && playlistQueue.length > 0){
+        playAllBtn.addEventListener('click', ()=>{
+          console.log('Play All clicked, queue:', playlistQueue);
+          const firstSong = playlistQueue[0];
+          console.log('First song:', firstSong);
+          if(firstSong && firstSong.id){
+            whenGlobalReady(()=>{
+              console.log('Calling playSongInBottomBar with ID:', firstSong.id);
+              window.playSongInBottomBar(firstSong.id);
+            });
+          } else {
+            console.error('First song or ID missing:', firstSong);
+          }
+        });
+      } else {
+        console.log('Play All button not found or queue empty');
+      }
+
+      // Individual song play from list
+      window.playSongFromPlaylist = function(idx){
+        if(idx >= 0 && idx < playlistQueue.length){
+          const song = playlistQueue[idx];
+          if(song && song.id){
+            whenGlobalReady(()=>{
+              window.playSongInBottomBar(song.id);
+            });
+          }
+        }
+      };
+
+      // Preview song in "Add More Songs" section
+      window.previewSong = function(file, title, artist, thumbnail){
+        // Create a temporary single-song queue and play
+        whenGlobalReady(()=>{
+          // Find song by file path if possible, or just alert
+          const matchingSong = playlistQueue.find(s => s.file === file);
+          if(matchingSong && matchingSong.id){
+            window.playSongInBottomBar(matchingSong.id);
+          } else {
+            alert('Preview: ' + title + ' by ' + artist + '\n(Add this song to play it)');
+          }
+        });
+      };
+
+      // Smooth scroll for "Add Songs" links
+      document.querySelectorAll('a[href="#addSongsSection"]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const section = document.getElementById('addSongsSection');
+          if(section){
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+
+      // Apply animation delays declared in data-delay attributes
+      document.querySelectorAll('[data-delay]').forEach(el => {
+        try { el.style.animationDelay = (el.dataset.delay || '0') + 's'; } catch(e){}
+      });
+
+      // Wire up delete buttons to show modal and submit form safely
+      document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const raw = btn.dataset.playlistName;
+          let name = '';
+          try { name = JSON.parse(raw); } catch(e) { name = raw || ''; }
+          if (typeof window.showModal === 'function') {
+            window.showModal({
+              title: 'Delete Playlist',
+              message: 'Are you sure you want to delete "' + name + '"? This action cannot be undone.',
+              danger: true,
+              confirmText: 'Delete',
+              onConfirm: function(){ btn.closest('form').submit(); }
+            });
+          } else {
+            if (confirm('Delete playlist "' + name + '"?')) btn.closest('form').submit();
+          }
+        });
+      });
+
+      // Wire play icons (rows) to use the in-script player function
+      document.querySelectorAll('.play-icon[data-idx]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = Number(btn.dataset.idx);
+          if (!Number.isNaN(idx) && typeof window.playSongFromPlaylist === 'function') {
+            window.playSongFromPlaylist(idx);
+          }
+          e.stopPropagation();
+        });
+      });
+
+      // Wire preview buttons in available songs
+      document.querySelectorAll('.preview-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const file = btn.dataset.file;
+          const title = btn.dataset.title || '';
+          const artist = btn.dataset.artist || '';
+          const thumb = btn.dataset.thumb || '';
+          if (typeof window.previewSong === 'function') {
+            window.previewSong(file, title, artist, thumb);
+          }
+          e.stopPropagation();
+        });
+      });
+    })();
+</script>
+

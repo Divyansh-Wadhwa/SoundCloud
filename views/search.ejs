@@ -1,0 +1,317 @@
+
+
+<div class="search-results-page">
+  <% 
+    let q = '';
+    if (typeof title === 'string' && title.indexOf(':') !== -1) {
+      q = (title.split(':')[1] || '').trim();
+    }
+    // Normalize query for category buttons (e.g. 'hip-hop' -> 'Hiphop')
+    const qClean = (q || '').replace(/[^a-z0-9]/gi, '');
+    function capitalizeFirst(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
+    let displayTitle = '';
+    if (!q) {
+      displayTitle = 'All songs';
+    } else if (qClean) {
+      displayTitle = '"' + capitalizeFirst(qClean) + '"';
+    } else {
+      displayTitle = `Search Results for "${q}"`;
+    }
+  %>
+  <h1 class="search-title"><%= displayTitle %></h1>
+  <% if (songs.length > 0) { %>
+    <div class="tracks-grid-new">
+      <% songs.forEach((song, idx) => { %>
+        <div class="track-card-new" onclick="playSongInBottomBar('<%= song._id %>')" data-song-id="<%= song._id %>" data-animation-delay="<%= idx * 0.05 %>">
+          <div class="track-cover-new">
+            <img src="<%= song.thumbnail || '/images/default-cover.png' %>" alt="<%= song.title %>" loading="lazy">
+            <div class="track-overlay">
+              <a href="/player/<%= song._id %>" class="play-btn-new"><i class="fas fa-play"></i></a>
+            </div>
+            <button class="fav-btn-new" onclick="event.stopPropagation(); toggleFavorite && toggleFavorite('<%= song._id %>', this)"><i class="fas fa-heart"></i></button>
+          </div>
+          <div class="track-info-new">
+            <h3 class="track-title-new"><%= song.title %></h3>
+            <p class="track-artist-new"><%= song.artist %></p>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="no-songs-found">
+      <i class="fas fa-search fa-3x"></i>
+      <h2>No songs found.</h2>
+      <p>Try a different search or check back later!</p>
+    </div>
+  <% } %>
+</div>
+<style>
+.search-results-page {
+  width: 100%;
+  margin: 0;
+  padding: 40px 16px 60px 16px;
+}
+.search-title {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #fff;
+  margin-bottom: 32px;
+  letter-spacing: -1px;
+  text-align: left;
+}
+.search-query {
+  color: #667eea;
+  font-weight: 700;
+}
+/* Compact grid and card layout */
+/* Left-aligned, space-efficient grid */
+/* --- Copied from index.ejs for card consistency --- */
+.tracks-grid-new {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 24px;
+}
+.track-card-new {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: fadeSlideUp 0.6s ease forwards;
+  opacity: 0;
+  border: 2px solid transparent;
+}
+.track-card-new:hover {
+  background: rgba(102, 126, 234, 0.08);
+  transform: translateY(-8px);
+  border-color: rgba(102, 126, 234, 0.3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+.track-cover-new {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+}
+.track-cover-new img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+.track-card-new:hover .track-cover-new img {
+  transform: scale(1.1);
+}
+.track-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.track-card-new:hover .track-overlay {
+  opacity: 1;
+}
+.play-btn-new {
+  width: 56px;
+  height: 56px;
+  background: var(--primary-gradient);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.6);
+  transition: all 0.3s ease;
+}
+.play-btn-new:hover {
+  transform: scale(1.15);
+}
+.fav-btn-new {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.track-card-new:hover .fav-btn-new {
+  opacity: 1;
+}
+.fav-btn-new.active {
+  opacity: 1;
+  background: #ff4757;
+}
+.fav-btn-new:hover {
+  transform: scale(1.2);
+}
+.track-info-new {
+  padding: 4px 0;
+}
+.track-title-new {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-artist-new {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.song-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px 12px 0 0;
+  display: block;
+}
+.song-card-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  background: rgba(0,0,0,0.22);
+  transition: opacity 0.18s;
+  z-index: 2;
+}
+.song-card-modern:hover .song-card-overlay {
+  opacity: 1;
+}
+.song-card-play {
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  margin: 0 6px 0 0;
+  box-shadow: 0 2px 8px rgba(102,126,234,0.12);
+  text-decoration: none;
+  transition: background 0.14s, transform 0.14s;
+}
+.song-card-play:hover {
+  background: #a084e8;
+  transform: scale(1.08);
+}
+.song-card-fav {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  margin-left: 4px;
+  cursor: pointer;
+  transition: background 0.14s, transform 0.14s;
+}
+.song-card-fav:hover {
+  background: #ff6b6b;
+  color: #fff;
+  transform: scale(1.12);
+}
+.song-card-info {
+  padding: 10px 10px 0 10px;
+  width: 100%;
+}
+.song-card-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 2px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.song-card-artist {
+  font-size: 0.9rem;
+  color: #a0aec0;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.no-songs-found {
+  text-align: center;
+  margin: 120px 0 60px 0;
+  color: #a0aec0;
+}
+.no-songs-found i {
+  margin-bottom: 18px;
+  color: #667eea;
+}
+.no-songs-found h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+  color: #fff;
+}
+.no-songs-found p {
+  font-size: 1.1rem;
+  color: #a0aec0;
+}
+@media (max-width: 900px) {
+  .search-title {
+    font-size: 1.5rem;
+    margin-bottom: 18px;
+  }
+  .song-card-grid {
+    gap: 18px 8px;
+  }
+  .song-card-modern {
+    min-height: 180px;
+    padding: 0 0 10px 0;
+  }
+  .song-card-cover {
+    border-radius: 12px 12px 0 0;
+  }
+  .song-card-cover img {
+    border-radius: 12px 12px 0 0;
+  }
+  .song-card-info {
+    padding: 10px 8px 0 8px;
+  }
+}
+</style>
+

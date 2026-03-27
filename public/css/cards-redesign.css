@@ -1,0 +1,287 @@
+/* ====================================
+   CLEAN CARD & PLAY BUTTON REDESIGN
+   ==================================== */
+
+/* Remove all old card styles and use these clean ones */
+
+/* Card Grid */
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 24px;
+  padding: 20px 0;
+}
+
+.landing-grid-lg {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 28px;
+}
+
+/* Base Card Styles */
+.landing-card {
+  background: var(--bg-card);
+  backdrop-filter: var(--blur-glass);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  border: 1px solid rgba(102, 126, 234, 0.15);
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.landing-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3), 0 12px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* Card Image Container */
+.card-image-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+}
+
+.card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+  display: block;
+}
+
+.landing-card:hover .card-image {
+  transform: scale(1.1);
+}
+
+/* Play Button - Centered & Fixed Position */
+.card-play-btn {
+  /* Position */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  
+  /* Size */
+  width: 56px;
+  height: 56px;
+  
+  /* Centering - ALWAYS maintain this */
+  transform: translate(-50%, -50%);
+  
+  /* Style */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 20px;
+  cursor: pointer;
+  
+  /* Layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Effects */
+  opacity: 0;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+  transition: opacity 0.3s ease, box-shadow 0.3s ease, filter 0.2s ease;
+  outline: none;
+  
+  /* Prevent text selection */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Show play button on card hover */
+.landing-card:hover .card-play-btn {
+  opacity: 1;
+}
+
+/* Play button hover - MAINTAIN CENTER POSITION */
+.card-play-btn:hover {
+  transform: translate(-50%, -50%); /* Keep centered */
+  box-shadow: 0 6px 30px rgba(102, 126, 234, 0.7);
+  filter: brightness(1.15);
+}
+
+/* Play button active/click - MAINTAIN CENTER POSITION */
+.card-play-btn:active {
+  transform: translate(-50%, -50%); /* Keep centered */
+  filter: brightness(0.95);
+}
+
+/* Play button focus - MAINTAIN CENTER POSITION */
+.card-play-btn:focus {
+  transform: translate(-50%, -50%); /* Keep centered */
+  outline: none;
+}
+
+/* Play button icon */
+.card-play-btn i {
+  pointer-events: none;
+  display: block;
+}
+
+/* Album Card Play Overlay */
+.card-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  width: 56px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+  transition: opacity 0.3s ease, box-shadow 0.3s ease, filter 0.2s ease;
+  text-decoration: none;
+}
+
+.landing-card:hover .card-play-overlay {
+  opacity: 1;
+}
+
+.card-play-overlay:hover {
+  transform: translate(-50%, -50%);
+  box-shadow: 0 6px 30px rgba(102, 126, 234, 0.7);
+  filter: brightness(1.15);
+}
+
+/* Favorite Button */
+.favorite-btn-card {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 11;
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.landing-card:hover .favorite-btn-card {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.favorite-btn-card:hover {
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.favorite-btn-card.active {
+  opacity: 1;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.favorite-btn-card.active:hover {
+  background: rgba(255, 107, 107, 0.25);
+  transform: scale(1.1);
+}
+
+/* Card Content */
+.card-content {
+  padding: 18px;
+  background: var(--bg-card);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-artist {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 4px 0 0 0;
+}
+
+/* Fade In Animation */
+@keyframes fadeInCard {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeInCard 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.landing-card:nth-child(1) { animation-delay: 0.05s; }
+.landing-card:nth-child(2) { animation-delay: 0.1s; }
+.landing-card:nth-child(3) { animation-delay: 0.15s; }
+.landing-card:nth-child(4) { animation-delay: 0.2s; }
+.landing-card:nth-child(5) { animation-delay: 0.25s; }
+.landing-card:nth-child(6) { animation-delay: 0.3s; }
+.landing-card:nth-child(7) { animation-delay: 0.35s; }
+.landing-card:nth-child(8) { animation-delay: 0.4s; }
+.landing-card:nth-child(9) { animation-delay: 0.45s; }
+.landing-card:nth-child(10) { animation-delay: 0.5s; }
+.landing-card:nth-child(11) { animation-delay: 0.55s; }
+.landing-card:nth-child(12) { animation-delay: 0.6s; }
+
+/* Empty State */
+.empty-msg {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-size: 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(102, 126, 234, 0.3);
+}

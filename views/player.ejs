@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= song.title %> - SoundCloud</title>
+  <!-- Google Font for a modern UI similar to SoundCloud -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <!-- Font Awesome for aesthetic icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="top-navbar" id="topNavbar">
+    <!-- Brand Section -->
+    <a href="/" class="nav-brand">
+      <img src="/images/logo.svg" alt="SoundCloud Logo" class="brand-icon">
+      <span class="brand-text">SoundCloud</span>
+    </a>
+
+    <!-- Main Navigation Links -->
+    <div class="nav-menu">
+      <a href="/" class="menu-link">
+        <i class="fas fa-house"></i>
+        <span>Home</span>
+      </a>
+
+      <% if(user && !user.isAdmin){ %>
+        <a href="/playlists" class="menu-link">
+          <i class="fas fa-list"></i>
+          <span>Playlists</span>
+        </a>
+        <a href="/favorites" class="menu-link">
+          <i class="fas fa-heart"></i>
+          <span>Favorites</span>
+        </a>
+      <% } %>
+    </div>
+
+    <!-- Right Actions -->
+    <div class="nav-actions">
+      <% if(user){ %>
+        <!-- User Avatar Dropdown -->
+        <div class="user-dropdown">
+          <button class="user-avatar-btn" id="userAvatarBtn">
+            <img src="https://api.dicebear.com/7.x/bottts-neutral/svg?seed=<%= user.username %>" alt="<%= user.username %>" class="user-avatar-img">
+          </button>
+          <div class="user-dropdown-menu" id="userDropdownMenu">
+            <div class="dropdown-header">
+              <div class="dropdown-avatar">
+                <img src="https://api.dicebear.com/7.x/bottts-neutral/svg?seed=<%= user.username %>" alt="<%= user.username %>" class="user-avatar-img">
+              </div>
+              <div class="dropdown-user-info">
+                <span class="dropdown-username"><%= user.username %></span>
+                <span class="dropdown-email"><%= user.email %></span>
+              </div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <a href="/dashboard" class="dropdown-item">
+              <i class="fas fa-home"></i>
+              <span>Dashboard</span>
+            </a>
+            <a href="/playlists" class="dropdown-item">
+              <i class="fas fa-list"></i>
+              <span>My Playlists</span>
+            </a>
+            <div class="dropdown-divider"></div>
+            <a href="/logout" class="dropdown-item logout-item">
+              <i class="fas fa-power-off"></i>
+              <span>Logout</span>
+            </a>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="player-wrap">
+      <div id="queueData" data-queue='<%= JSON.stringify(songs) %>' style="display:none"></div>
+      <audio id="audioPlayer" src="<%= song.file %>" preload="metadata" style="display:none"></audio>
+      <script>
+        function handleBackClick() {
+          try {
+            const audioEl = document.getElementById('audioPlayer');
+            if (audioEl) {
+              localStorage.setItem('player_resume', JSON.stringify({
+                songId: '<%= song._id %>',
+                currentTime: audioEl.currentTime || 0,
+                paused: audioEl.paused
+              }));
+            }
+          } catch (e) { console.warn('Could not save resume on back', e); }
+          // short delay to ensure storage write is flushed
+          setTimeout(()=>{
+            if (history.length > 1) history.back(); else location.href = '/';
+          }, 120);
+        }
+      </script>
+      <div class="player-left">
+        <button id="backBtn" class="back-btn" title="Back" onclick="(history.length>1?history.back():location.href='/')">← Back</button>
+        <img src="<%= song.thumbnail || song.cover || '/images/default-cover.png' %>" alt="cover" class="player-cover" id="playerCover">
+        <div class="now-info">
+          <div class="now-title" id="playerTitle"><%= song.title %></div>
+          <div class="now-artist" id="playerArtist"><%= song.artist %></div>
+        </div>
+      </div>
+
+      <div class="player-center">
+        <!-- Waveform Visualization -->
+        <div class="waveform-container">
+          <canvas id="waveformCanvas" width="600" height="80"></canvas>
+        </div>
+
+        <div class="controls">
+          <div class="control-btn prev" title="Previous" id="prevBtn"><i class="fas fa-step-backward"></i></div>
+          <div class="control-btn play" id="playBtn"><i class="fas fa-play"></i></div>
+          <div class="control-btn next" title="Next" id="nextBtn"><i class="fas fa-step-forward"></i></div>
+        </div>
+
+        <div class="progress">
+          <div class="time" id="currentTime">0:00</div>
+          <div class="progress-bar" id="progressBar">
+            <div class="fill" id="progressFill"></div>
+          </div>
+          <input type="range" id="playerSlider" min="0" max="100" step="0.1" value="0" aria-label="Seek" style="width:100%;">
+          <div class="time" id="duration">0:00</div>
+        </div>
+
+
+      </div>
+
+      <div class="player-right">
+        <div class="queue-panel">
+          <h3 style="margin:0 0 10px 0">Queue</h3>
+          <% songs.forEach((s, idx) => { %>
+            <div class="queue-item <%= s._id.toString()===song._id.toString() ? 'active' : '' %>" data-idx="<%= idx %>" data-src="<%= s.file %>">
+              <img src="<%= s.thumbnail || s.cover || '/images/default-cover.png' %>" alt="thumb">
+              <div class="meta">
+                <div class="q-title"><%= s.title %></div>
+                <div class="q-artist"><%= s.artist %></div>
+              </div>
+              <div class="q-action"><i class="fas fa-play"></i></div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .waveform-container {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+      margin-bottom: 50px;
+    }
+
+    #waveformCanvas {
+      width: 100%;
+      max-width: 600px;
+      height: 80px;
+    }
+    
+    .player-center .controls {
+      margin-bottom: 20px;
+    }
+  </style>
+    <style>
+      .back-btn {
+        background: transparent;
+        color: var(--text-primary);
+        border: 1px solid rgba(255,255,255,0.06);
+        padding: 6px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-bottom: 10px;
+        transition: background 0.15s, transform 0.08s;
+      }
+      .back-btn:hover { background: rgba(255,255,255,0.03); transform: translateY(-1px); }
+      /* Player slider styling using CSS variable --pct for filled percent */
+      #playerSlider {
+        height: 6px;
+        background: linear-gradient(90deg, rgba(102,126,234,1) var(--pct, 0%), rgba(255,255,255,0.06) var(--pct, 0%));
+        border-radius: 6px;
+        margin: 6px 0;
+      }
+     
+    </style>
+
+  <script>
+  // Robust resume: set currentTime after loadedmetadata, play after canplay, with debug logging
+  window.addEventListener('DOMContentLoaded', function() {
+    try {
+      var resume = JSON.parse(localStorage.getItem('player_resume'));
+      var audio = document.getElementById('audioPlayer');
+      console.log('[player.ejs] Resume data:', resume);
+      if (resume && resume.songId === '<%= song._id %>') {
+        function tryPlay() {
+          console.log('[player.ejs] Setting currentTime to', resume.currentTime);
+          audio.currentTime = resume.currentTime || 0;
+          audio.play().then(() => {
+            document.getElementById('playBtn').innerHTML = '<i class="fas fa-pause"></i>';
+            console.log('[player.ejs] Playback started at', audio.currentTime);
+          }).catch((err)=>{console.warn('[player.ejs] play() failed', err);});
+          localStorage.removeItem('player_resume');
+        }
+        if (audio.readyState >= 1) {
+          console.log('[player.ejs] audio.readyState >= 1, trying to play immediately');
+          tryPlay();
+        } else {
+          console.log('[player.ejs] Waiting for loadedmetadata...');
+          audio.addEventListener('loadedmetadata', function metaHandler() {
+            audio.removeEventListener('loadedmetadata', metaHandler);
+            console.log('[player.ejs] loadedmetadata fired');
+            audio.addEventListener('canplay', function canplayHandler() {
+              audio.removeEventListener('canplay', canplayHandler);
+              console.log('[player.ejs] canplay fired, trying to play');
+              tryPlay();
+            });
+          });
+        }
+      } else {
+        console.log('[player.ejs] No matching resume data or songId');
+      }
+    } catch(e) {console.warn('[player.ejs] Resume logic error', e);}
+  });
+
+  // Hybrid: local audio for player page, sync with global audio if needed
+  const audio = document.getElementById('audioPlayer');
+  const playBtn = document.getElementById('playBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const progressFill = document.getElementById('progressFill');
+  const currentTime = document.getElementById('currentTime');
+  const durationEl = document.getElementById('duration');
+  const canvas = document.getElementById('waveformCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Populate queue from server-rendered data attribute
+  const queueEl = document.getElementById('queueData');
+  const queue = queueEl ? JSON.parse(queueEl.dataset.queue || '[]') : [];
+  let currentIndex = queue.findIndex(s => s._id === '<%= song._id %>');
+
+  // Player slider (manual seek) integration
+  const slider = document.getElementById('playerSlider');
+  let sliderDragging = false;
+    if (slider) {
+    // Update UI while dragging
+    slider.addEventListener('input', function() {
+      if (!audio.duration) return;
+      const pct = parseFloat(slider.value) || 0;
+      const t = (pct / 100) * audio.duration;
+      currentTime.textContent = fmt(t);
+      progressFill.style.width = pct + '%';
+      slider.style.setProperty('--pct', pct + '%');
+    });
+
+    // Seek on change/end
+    slider.addEventListener('change', function() {
+      if (!audio.duration) return;
+      const pct = parseFloat(slider.value) || 0;
+      audio.currentTime = (pct / 100) * audio.duration;
+      sliderDragging = false;
+      slider.style.setProperty('--pct', pct + '%');
+    });
+
+    // Pointer interactions
+    slider.addEventListener('pointerdown', function(){ sliderDragging = true; });
+    slider.addEventListener('pointerup', function(){ sliderDragging = false; });
+  }
+
+  // Keep slider in sync with playback
+  audio.addEventListener('timeupdate', function() {
+    if (!audio.duration) return;
+    const pct = (audio.currentTime / audio.duration) * 100 || 0;
+    if (!sliderDragging && slider) {
+      slider.value = pct;
+      slider.style.setProperty('--pct', pct + '%');
+    }
+    progressFill.style.width = pct + '%';
+    currentTime.textContent = fmt(audio.currentTime);
+    durationEl.textContent = fmt(audio.duration);
+  });
+
+  // On load, if global audio is playing this song, sync position/state
+  try {
+    const globalAudio = window.parent ? window.parent.document.getElementById('globalAudio') : null;
+    if (globalAudio && globalAudio.src && globalAudio.src.includes('<%= song.file %>')) {
+      audio.currentTime = globalAudio.currentTime;
+      if (!globalAudio.paused) {
+        audio.play();
+        if (playBtn) playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+
+
+
+
+    // Format time
+    function fmt(s) {
+      if (!isFinite(s)) return '0:00';
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60).toString().padStart(2, '0');
+      return `${m}:${sec}`;
+    }
+
+    // Draw waveform
+    function drawWaveform() {
+      const width = canvas.width;
+      const height = canvas.height;
+      const barCount = 50;
+      const barWidth = width / barCount;
+
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < barCount; i++) {
+        const barHeight = Math.random() * height * 0.7 + height * 0.15;
+        const x = i * barWidth;
+        const y = (height - barHeight) / 2;
+
+        ctx.fillStyle = 'rgba(102, 126, 234, 0.7)';
+        ctx.fillRect(x, y, barWidth - 2, barHeight);
+      }
+    }
+
+    // Animate waveform when playing
+    let waveformInterval;
+    function startWaveformAnimation() {
+      // Clear any existing interval first to prevent multiple intervals
+      if(waveformInterval) clearInterval(waveformInterval);
+      waveformInterval = setInterval(drawWaveform, 150);
+    }
+
+    function stopWaveformAnimation() {
+      if(waveformInterval) clearInterval(waveformInterval);
+      waveformInterval = null;
+      drawWaveform();
+    }
+
+    // Load song
+    function loadSong(index) {
+      if (index < 0 || index >= queue.length) return;
+      currentIndex = index;
+      const song = queue[index];
+      
+      audio.src = song.file;
+      audio.load();
+      
+      // Update cover, title, and artist
+      const coverImg = document.getElementById('playerCover');
+      const titleEl = document.getElementById('playerTitle');
+      const artistEl = document.getElementById('playerArtist');
+      
+      if (coverImg) coverImg.src = song.thumbnail || song.cover || '/images/default-cover.png';
+      if (titleEl) titleEl.textContent = song.title || 'Unknown';
+      if (artistEl) artistEl.textContent = song.artist || 'Unknown Artist';
+      
+      // Update active queue item
+      document.querySelectorAll('.queue-item').forEach((item, idx) => {
+        item.classList.toggle('active', idx === index);
+      });
+    }
+
+
+    // Play/Pause
+    playBtn.addEventListener('click', () => {
+      if (audio.paused) {
+        audio.play().then(() => {
+          playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        }).catch(() => {
+          playBtn.innerHTML = '<i class="fas fa-play"></i>';
+        });
+      } else {
+        audio.pause();
+        playBtn.innerHTML = '<i class="fas fa-play"></i>';
+      }
+    });
+
+    // Previous/Next
+    prevBtn.addEventListener('click', () => {
+      if (currentIndex > 0) {
+        loadSong(currentIndex - 1);
+        // Wait for audio to be ready
+        audio.addEventListener('canplay', function playHandler() {
+          audio.removeEventListener('canplay', playHandler);
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            }).catch(err => console.error('Play failed:', err));
+          }
+        });
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentIndex < queue.length - 1) {
+        loadSong(currentIndex + 1);
+        // Wait for audio to be ready
+        audio.addEventListener('canplay', function playHandler() {
+          audio.removeEventListener('canplay', playHandler);
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            }).catch(err => console.error('Play failed:', err));
+          }
+        });
+      }
+    });
+
+
+    // Update progress and time
+    audio.addEventListener('timeupdate', () => {
+      const pct = (audio.currentTime / audio.duration) * 100 || 0;
+      progressFill.style.width = pct + '%';
+      currentTime.textContent = fmt(audio.currentTime);
+    });
+    audio.addEventListener('loadedmetadata', () => {
+      durationEl.textContent = fmt(audio.duration);
+    });
+
+
+    // Auto play next song (optional: implement queue logic with global player)
+    // You may want to handle this in your global player logic
+
+
+    // Sync waveform with audio play/pause events
+    audio.addEventListener('play', () => {
+      startWaveformAnimation();
+      // recently-played recording removed
+    });
+    audio.addEventListener('pause', () => { stopWaveformAnimation(); });
+
+    // Queue item click
+    document.querySelectorAll('.queue-item').forEach((item, idx) => {
+      item.addEventListener('click', () => {
+        loadSong(idx);
+        // Wait for audio to be ready
+        audio.addEventListener('canplay', function playHandler() {
+          audio.removeEventListener('canplay', playHandler);
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            }).catch(err => console.error('Play failed:', err));
+          }
+        });
+      });
+    });
+
+    // Initial waveform
+    drawWaveform();
+  </script>
+
+  
+  <script>
+    // User dropdown toggle
+    const userBtn = document.querySelector('.user-btn');
+    const userMenu = document.querySelector('.user-dropdown-menu');
+    if (userBtn) {
+      userBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userMenu.classList.toggle('active');
+      });
+      document.addEventListener('click', () => {
+        userMenu.classList.remove('active');
+      });
+    }
+  </script>
+</body>
+</html>
