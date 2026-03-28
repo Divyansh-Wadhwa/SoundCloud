@@ -38,6 +38,15 @@ function App() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Clear player state when user logs out
+  useEffect(() => {
+    if (!user) {
+      setQueue([]);
+      setCurrentSongIndex(0);
+      setIsPlaying(false);
+    }
+  }, [user]);
+
   if (loading) return null; // or a spinner
 
   return (

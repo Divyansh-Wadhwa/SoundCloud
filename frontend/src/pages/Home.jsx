@@ -98,7 +98,7 @@ export default function Home({ user, setQueue, setCurrentSongIndex, setIsPlaying
               </h2>
               <p className="section-subtitle">Fresh releases from artists around the globe</p>
             </div>
-            <div className="lang-cards" style={{display:'flex',alignItems:'center',gap:'12px'}}>
+            <div className="lang-cards">
               {['', 'Hindi', 'Punjabi', 'English', 'Other'].map(lang => (
                 <Link key={lang} to={lang ? `/?lang=${lang}` : '/'} className={`lang-card ${selectedLang === lang ? 'active' : ''}`}>
                   {lang || 'All'}
@@ -111,7 +111,7 @@ export default function Home({ user, setQueue, setCurrentSongIndex, setIsPlaying
             {songs.slice(0, 12).map((song, idx) => (
               <div key={song.id} className="track-card-new" onClick={() => playSong(song.id)}>
                 <div className="track-cover-new">
-                  <img src={song.thumbnail || '/images/default-cover.png'} alt={song.title} loading="lazy" />
+                  <img src={song.thumbnail ? `http://localhost:5000${song.thumbnail}` : '/images/default-cover.png'} alt={song.title} loading="lazy" />
                   <div className="track-overlay">
                     <button className="play-btn-new">
                       <i className="fas fa-play"></i>
@@ -139,7 +139,7 @@ export default function Home({ user, setQueue, setCurrentSongIndex, setIsPlaying
           </div>
           <div className="albums-grid-new">
             {albums.map((al) => {
-              const albumCover = al.songs?.length > 0 ? al.songs[0].thumbnail : '/images/default-cover.png';
+              const albumCover = al.songs?.length > 0 ? `http://localhost:5000${al.songs[0].thumbnail}` : '/images/default-cover.png';
               return (
                 <Link key={al.id} to={`/album/${al.id}`} className="album-card-new">
                   <div className="album-cover-new">

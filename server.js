@@ -13,7 +13,6 @@ import fs from "fs";
 import pkg from '@prisma/client';
 const { PrismaClient } = pkg;
 import { encrypt, decrypt } from "./utils/encryption.js";
-import { SQLizerFile } from "sqlizer-client";
 
 const prisma = new PrismaClient();
 const __filename = fileURLToPath(import.meta.url);
@@ -22,12 +21,15 @@ const __dirname = path.dirname(__filename);
 const uploadsDir = path.join(__dirname, "uploads");
 const songsDir = path.join(uploadsDir, "songs");
 const thumbnailsDir = path.join(uploadsDir, "thumbnails");
-[songsDir, thumbnailsDir].forEach(dir => {
+const albumCoversDir = path.join(uploadsDir, "album-covers");
+[songsDir, thumbnailsDir, albumCoversDir].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Server restart trigger
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -310,13 +312,67 @@ app.get("/api/admin/data", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/admin/albums", requireAdmin, async (req, res) => {
-  const { name, artist } = req.body;
-  const album = await prisma.album.create({ data: { name, artist } });
-  res.json({ success: true, album });
+  try {
+    const { name, artist } = req.body;
+    let coverPath = null;
+    
+    if (req.files?.cover) {
+      const coverFile = req.files.cover;
+      const coverFileName = `${Date.now()}-${coverFile.name}`;
+      coverPath = `/uploads/album-covers/${coverFileName}`;
+      await coverFile.mv(path.join(albumCoversDir, coverFileName));
+    }
+    
+    const album = await prisma.album.create({ 
+      data: { 
+        name, 
+        artist,
+        ...(coverPath && { cover: coverPath })
+      } 
+    });
+    
+    res.json({ success: true, album });
+  } catch (error) {
+    console.error('Album creation error:', error);
+    res.status(500).json({ error: 'Failed to create album', details: error.message });
+  }
+});
+
+app.put("/api/admin/albums/:albumId/cover", requireAdmin, async (req, res) => {
+  if (!req.files?.cover) {
+    return res.status(400).json({ error: "No cover file provided" });
+  }
+  
+  const album = await prisma.album.findUnique({ where: { id: req.params.albumId } });
+  if (!album) {
+    return res.status(404).json({ error: "Album not found" });
+  }
+  
+  // Delete old cover if exists
+  if (album.cover) {
+    try { fs.unlinkSync(path.join(__dirname, album.cover)); } catch(e){}
+  }
+  
+  const coverFile = req.files.cover;
+  const coverFileName = `${Date.now()}-${coverFile.name}`;
+  const coverPath = `/uploads/album-covers/${coverFileName}`;
+  await coverFile.mv(path.join(albumCoversDir, coverFileName));
+  
+  const updatedAlbum = await prisma.album.update({
+    where: { id: req.params.albumId },
+    data: { cover: coverPath }
+  });
+  
+  res.json({ success: true, album: updatedAlbum });
 });
 app.delete("/api/admin/albums/:albumId", requireAdmin, async (req, res) => {
   const album = await prisma.album.findUnique({ where: { id: req.params.albumId }, include: { songs: true } });
   if (album) {
+    // Delete album cover if exists
+    if (album.cover) {
+      try { fs.unlinkSync(path.join(__dirname, album.cover)); } catch(e){}
+    }
+    
     for (const song of album.songs) {
       if (song.file) try { fs.unlinkSync(path.join(__dirname, song.file)); } catch(e){}
       if (song.thumbnail) try { fs.unlinkSync(path.join(__dirname, song.thumbnail)); } catch(e){}
@@ -394,33 +450,16 @@ app.post("/api/admin/albums/:albumId/remove/:songId", requireAdmin, async (req, 
   res.json({ success: true });
 });
 
-// SQLIZER BULK IMPORT
-app.post("/api/admin/sqlizer-import", requireAdmin, async (req, res) => {
-  if (!req.files || !req.files.file) return res.status(400).json({ error: "No file provided" });
-  const file = req.files.file;
-  const tempPath = path.join(__dirname, "uploads", file.name);
-  await file.mv(tempPath);
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Global error handler:', err);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
+});
 
-  try {
-    // SQLizer configuration
-    const sqlizer = new SQLizerFile({
-      ApiKey: process.env.SQLIZER_API_KEY || "dummy_key",
-      File: tempPath,
-      FileType: file.name.endsWith('.json') ? 'JSON' : 'CSV',
-      DatabaseType: 'PostgreSQL',
-      TableName: 'Song', // Default
-    });
-
-    const sqlUrl = await sqlizer.convert();
-    console.log("SQLizer converted file URL:", sqlUrl);
-
-    // cleanup
-    fs.unlinkSync(tempPath);
-
-    res.json({ success: true, message: "Started SQLizer conversion", url: sqlUrl });
-  } catch (err) {
-    res.status(500).json({ error: "Failed SQLizer import", details: err.message });
-  }
+// 404 handler
+app.use((req, res) => {
+  console.log('404 - Route not found:', req.method, req.url);
+  res.status(404).json({ error: 'Route not found' });
 });
 
 app.listen(PORT, () => console.log(`Server API running on port ${PORT}`));

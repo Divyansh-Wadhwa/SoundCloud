@@ -45,6 +45,7 @@ model Album {
   id      String   @id @default(uuid())
   name    String
   artist  String
+  cover   String?  // Album cover image path
   songs   Song[]
 }
 

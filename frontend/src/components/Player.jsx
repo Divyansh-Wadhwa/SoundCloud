@@ -11,7 +11,7 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
   useEffect(() => {
     if (audioRef.current && currentSong) {
       if (isPlaying) {
-        audioRef.current.play().catch(e => console.error(e));
+        audioRef.current.play().catch(e => console.error('Play error:', e));
       } else {
         audioRef.current.pause();
       }
@@ -57,7 +57,7 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
     <>
       <audio 
         ref={audioRef}
-        src={currentSong.file}
+        src={`http://localhost:5000${currentSong.file}`}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
         onLoadedMetadata={handleTimeUpdate}
@@ -66,7 +66,7 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
       {!collapsed ? (
         <div className="bottom-player" id="globalBottomPlayer">
           <div className="bp-left">
-            <img id="bp-cover" src={currentSong.thumbnail || '/images/default-cover.png'} alt="cover" />
+            <img id="bp-cover" src={currentSong.thumbnail ? `http://localhost:5000${currentSong.thumbnail}` : '/images/default-cover.png'} alt="cover" />
             <div className="bp-meta">
               <div id="bp-title">{currentSong.title}</div>
               <div id="bp-artist">{currentSong.artist}</div>

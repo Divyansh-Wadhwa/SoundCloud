@@ -73,7 +73,7 @@ export default function Search({ setQueue, setCurrentSongIndex, setIsPlaying, us
               {songs.map(song => (
                 <div key={song.id} className="track-card-new" onClick={() => playSong(song.id)}>
                   <div className="track-cover-new">
-                    <img src={song.thumbnail || '/images/default-cover.png'} alt={song.title} loading="lazy" />
+                    <img src={song.thumbnail ? `http://localhost:5000${song.thumbnail}` : '/images/default-cover.png'} alt={song.title} loading="lazy" />
                     <div className="track-overlay">
                       <button className="play-btn-new"><i className="fas fa-play"></i></button>
                     </div>
@@ -90,7 +90,7 @@ export default function Search({ setQueue, setCurrentSongIndex, setIsPlaying, us
             <h3 style={{marginBottom:'15px', color:'var(--text-muted)'}}>Albums ({albums.length})</h3>
             <div className="albums-grid-new">
               {albums.map((al) => {
-                const albumCover = al.songs?.length > 0 ? al.songs[0].thumbnail : '/images/default-cover.png';
+                const albumCover = al.songs?.length > 0 ? `http://localhost:5000${al.songs[0].thumbnail}` : '/images/default-cover.png';
                 return (
                   <Link key={al.id} to={`/album/${al.id}`} className="album-card-new">
                     <div className="album-cover-new">
