@@ -134,7 +134,6 @@ app.get('/api/me', async (req, res) => {
   }
 });
 
-// AUTH
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
