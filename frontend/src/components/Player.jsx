@@ -9,8 +9,38 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
   const [volume, setVolume] = useState(1);
   const [previousVolume, setPreviousVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavAnimating, setIsFavAnimating] = useState(false);
   
   const currentSong = queue[index] || null;
+
+  useEffect(() => {
+    if (currentSong) {
+      axios.get(`/api/favorites/check/${currentSong.id}`)
+        .then(res => setIsFavorite(res.data.isFavorite))
+        .catch(() => setIsFavorite(false));
+    }
+  }, [currentSong]);
+
+  const toggleFavorite = async () => {
+    if (!currentSong) return;
+    const newFavState = !isFavorite;
+    // Optimistic fast UI update
+    setIsFavorite(newFavState);
+    setIsFavAnimating(true);
+    setTimeout(() => setIsFavAnimating(false), 200);
+
+    try {
+      if (newFavState) {
+        await axios.post(`/api/favorites/add/${currentSong.id}`);
+      } else {
+        await axios.post(`/api/favorites/remove/${currentSong.id}`);
+      }
+    } catch (e) {
+      // Revert if API fails
+      setIsFavorite(!newFavState);
+    }
+  };
 
   useEffect(() => {
     if (audioRef.current && currentSong) {
@@ -47,17 +77,30 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
   };
 
   const handleSeek = (e) => {
-    const time = (e.target.value / 100) * duration;
-    audioRef.current.currentTime = time;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const newPct = Math.max(0, Math.min(clickX / rect.width, 1));
+    const time = newPct * duration;
+    if (audioRef.current) audioRef.current.currentTime = time;
     setCurrentTime(time);
   };
 
+  const handleSeekDrag = (e) => {
+    if (e.buttons === 1) handleSeek(e);
+  };
+
   const handleVolumeChange = (e) => {
-    const newVolume = parseFloat(e.target.value);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const newVolume = Math.max(0, Math.min(clickX / rect.width, 1));
     setVolume(newVolume);
     if (newVolume > 0 && isMuted) {
       setIsMuted(false);
     }
+  };
+
+  const handleVolumeDrag = (e) => {
+    if (e.buttons === 1) handleVolumeChange(e);
   };
 
   const toggleMute = () => {
@@ -84,6 +127,51 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
 
   return (
     <>
+      <style>{`
+        .custom-range-track {
+          position: relative;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 999px;
+          cursor: pointer;
+          touch-action: none; /* Prevent scroll on drag */
+          transition: height 0.2s ease, background 0.3s ease;
+        }
+        .custom-range-track:hover {
+          height: 10px;
+          background: rgba(255, 255, 255, 0.25);
+        }
+        .custom-range-fill {
+          position: absolute;
+          top: 0;
+          left: 0;
+          height: 100%;
+          border-radius: 999px;
+          pointer-events: none;
+        }
+        .custom-range-thumb {
+          position: absolute;
+          top: 50%;
+          width: 16px;
+          height: 16px;
+          background: #fff;
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .custom-range-track:hover .custom-range-thumb {
+          transform: translate(-50%, -50%) scale(1.4);
+        }
+        @keyframes fastHeartPop {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.4); }
+          100% { transform: scale(1); }
+        }
+        .animating-heart {
+          animation: fastHeartPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+        }
+      `}</style>
       <audio 
         ref={audioRef}
         src={`http://localhost:5000${currentSong.file}`}
@@ -109,14 +197,15 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
             </div>
             <div className="bp-progress-wrap">
               <span id="bp-curtime">{fmt(currentTime)}</span>
-              <input 
-                type="range" 
-                id="bp-slider" 
-                min="0" max="100" 
-                value={pct} 
-                step="0.1" 
-                onChange={handleSeek}
-              />
+              <div 
+                className="custom-range-track"
+                onPointerDown={handleSeek}
+                onPointerMove={handleSeekDrag}
+                style={{ flex: 1, margin: '0 8px' }}
+              >
+                <div className="custom-range-fill" style={{ width: `${pct || 0}%`, background: 'linear-gradient(90deg, #FF3CAC 0%, #f093fb 100%)' }}></div>
+                <div className="custom-range-thumb" style={{ left: `${pct || 0}%`, border: '3px solid #f093fb', boxShadow: '0 0 10px #f093fb' }}></div>
+              </div>
               <span id="bp-duration">{fmt(duration)}</span>
             </div>
           </div>
@@ -125,29 +214,22 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
               <button className="bp-btn" onClick={toggleMute} title={isMuted ? "Unmute" : "Mute"}>
                 <i className={`fas ${isMuted || volume === 0 ? 'fa-volume-mute' : volume < 0.5 ? 'fa-volume-down' : 'fa-volume-up'}`}></i>
               </button>
-              <input 
-                type="range" 
-                className="volume-slider" 
-                min="0" max="1" 
-                value={isMuted ? 0 : volume} 
-                step="0.01" 
-                onChange={handleVolumeChange}
-                style={{ width: '80px' }}
-              />
+              <div 
+                className="custom-range-track"
+                onPointerDown={handleVolumeChange}
+                onPointerMove={handleVolumeDrag}
+                style={{ width: '90px' }}
+              >
+                <div className="custom-range-fill" style={{ width: `${(isMuted ? 0 : volume) * 100}%`, background: 'linear-gradient(90deg, #4facfe 0%, #00f2fe 100%)' }}></div>
+                <div className="custom-range-thumb" style={{ left: `${(isMuted ? 0 : volume) * 100}%`, border: '3px solid #4facfe', boxShadow: '0 0 10px #4facfe' }}></div>
+              </div>
             </div>
-            <button className="bp-btn bp-favorite" title="Add to favorites" onClick={() => {
-               // Global favorite logic mock, ideally calls API
-               fetch(`/api/favorites/add/${currentSong.id}`, {method: 'POST'})
-                 .then(res => res.json())
-                 .then((data) => {
-                    const btn = document.getElementById('bpFavoriteBtn');
-                    if(btn) {
-                        btn.classList.toggle('active');
-                        btn.style.animation = 'heartPop 0.3s ease';
-                        setTimeout(() => btn.style.animation = '', 300);
-                    }
-                 });
-            }} id="bpFavoriteBtn">
+            <button 
+              className={`bp-btn bp-favorite ${isFavorite ? 'active' : ''} ${isFavAnimating ? 'animating-heart' : ''}`} 
+              title={isFavorite ? "Remove from favorites" : "Add to favorites"} 
+              onClick={toggleFavorite}
+              style={{ color: isFavorite ? '#ff6b6b' : '', transformOrigin: 'center' }}
+            >
               <i className="fas fa-heart"></i>
             </button>
             <button className="bp-btn bp-collapse" title="Collapse player" onClick={() => setCollapsed(true)}>

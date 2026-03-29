@@ -298,28 +298,64 @@ h3 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; }
 
 /* Style the slider to match the visual progress bar exactly */
 #bp-slider {
-  width: 100%;
-  height: 6px;
-  /* default track background; filled portion controlled by --pct */
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 100% !important;
+  height: 6px !important;
   --pct: 0%;
-  --fill-color: rgba(102,126,234,1);
-  background: linear-gradient(90deg, var(--fill-color) var(--pct), rgba(255,255,255,0.12) var(--pct));
-  border-radius: 999px;
-  margin: 0 8px;
+  --fill-color: #f093fb;
+  background: linear-gradient(90deg, var(--fill-color) var(--pct), rgba(255,255,255,0.1) var(--pct)) !important;
+  border-radius: 999px !important;
+  margin: 0 8px !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: height 0.2s ease !important;
+  accent-color: var(--fill-color);
+}
+
+#bp-slider:hover {
+  height: 8px;
+}
+
+#bp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  background: #fff !important;
+  border-radius: 50% !important;
+  border: 3px solid var(--fill-color) !important;
+  box-shadow: 0 0 10px var(--fill-color) !important;
+  cursor: pointer !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  margin-top: -5px; /* Aligns thumb with the track */
+}
+
+#bp-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 15px var(--fill-color), 0 0 5px #fff inset;
 }
 
 #bp-slider::-moz-range-track {
   height: 6px;
-  background: rgba(255,255,255,0.06);
+  background: transparent;
   border-radius: 999px;
 }
+
 #bp-slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background: #fff;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.9);
-  box-shadow: 0 0 8px rgba(102,126,234,0.6);
+  border: 3px solid var(--fill-color);
+  box-shadow: 0 0 10px var(--fill-color);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#bp-slider::-moz-range-thumb:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 15px var(--fill-color), 0 0 5px #fff inset;
 }
 
 .bp-right {
@@ -338,48 +374,65 @@ h3 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; }
 }
 
 .volume-slider {
-  width: 80px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 90px !important;
+  height: 6px !important;
+  --vol-pct: 100%;
+  --vol-fill: #4facfe;
+  background: linear-gradient(90deg, var(--vol-fill) var(--vol-pct), rgba(255, 255, 255, 0.15) var(--vol-pct)) !important;
+  border-radius: 4px !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: background 0.3s ease, height 0.2s ease !important;
+  accent-color: var(--vol-fill);
+}
+
+.volume-slider:hover {
+  height: 8px;
 }
 
 .volume-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  background: white;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 0 6px rgba(102, 126, 234, 0.8);
-  border: 2px solid var(--accent-1);
-  transition: all 0.2s ease;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 14px !important;
+  height: 14px !important;
+  background: #fff !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  box-shadow: 0 0 10px rgba(79, 172, 254, 0.8) !important;
+  border: 2px solid var(--vol-fill) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  margin-top: -4px; /* Aligns thumb */
 }
 
 .volume-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-  background: var(--accent-2);
+  transform: scale(1.4);
+  background: var(--vol-fill);
+  box-shadow: 0 0 15px var(--vol-fill);
+}
+
+.volume-slider::-moz-range-track {
+  height: 6px;
+  background: transparent;
+  border-radius: 4px;
 }
 
 .volume-slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  background: white;
+  width: 14px;
+  height: 14px;
+  background: #fff;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(102, 126, 234, 0.8);
-  border: 2px solid var(--accent-1);
-  transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(79, 172, 254, 0.8);
+  border: 2px solid var(--vol-fill);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .volume-slider::-moz-range-thumb:hover {
-  transform: scale(1.2);
-  background: var(--accent-2);
+  transform: scale(1.4);
+  background: var(--vol-fill);
+  box-shadow: 0 0 15px var(--vol-fill);
 }
 
 .progress-slider-input::-webkit-slider-thumb {

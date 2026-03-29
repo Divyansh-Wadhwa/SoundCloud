@@ -9,16 +9,20 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fileUpload from "express-fileupload";
 import fs from "fs";
+import { Op } from "sequelize";
 
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import sequelize from "./config/database.js";
+import db from "./models/index.js";
+const { User, Album, Song, Playlist, RecentlyPlayed } = db;
 import { encrypt, decrypt } from "./utils/encryption.js";
 
-const prisma = new PrismaClient();
-
-// Test database connection
-prisma.$connect()
-  .then(() => console.log('Database connected successfully'))
+// Test database connection and sync models
+sequelize.authenticate()
+  .then(() => {
+    console.log('Database connected successfully');
+    return sequelize.sync({ alter: true }); // Syncs models without dropping tables if possible
+  })
+  .then(() => console.log('Database synced'))
   .catch(err => console.error('Database connection failed:', err));
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,8 +39,6 @@ const albumCoversDir = path.join(uploadsDir, "album-covers");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Server restart trigger
-
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin || origin.startsWith("http://localhost:")) {
@@ -51,41 +53,33 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(fileUpload());
 
-// API ROUTES - Move before static file serving
+// API ROUTES
 app.get("/api/albums/:albumId", async (req, res) => {
   try {
-    console.log('Fetching album with ID:', req.params.albumId);
-    const album = await prisma.album.findUnique({ 
-      where: { id: req.params.albumId },
-      include: { 
-        songs: {
-          orderBy: { createdAt: 'asc' }
-        }
-      }
+    const album = await Album.findByPk(req.params.albumId, {
+      include: [{ 
+        model: Song,
+        as: 'songs'
+      }],
+      order: [[{ model: Song, as: 'songs' }, 'createdAt', 'ASC']]
     });
     
-    console.log('Album found:', album);
-    
     if (!album) {
-      console.log('Album not found for ID:', req.params.albumId);
       return res.status(404).json({ error: "Album not found" });
     }
-    
     res.json(album);
   } catch (error) {
-    console.error('Error fetching album:', error);
     res.status(500).json({ error: "Failed to fetch album" });
   }
 });
 
-// Static file serving after API routes
+// Serve built React frontend first so it overrides any legacy assets
+app.use(express.static(path.join(__dirname, "frontend", "dist")));
+
+// Fallback to legacy static file serving
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Serve built frontend
-app.use(express.static(path.join(__dirname, "frontend", "dist")));
-
-// Serve frontend for all non-API routes
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
@@ -95,7 +89,7 @@ app.use((req, res, next) => {
 
 // SESSION MIDDLEWARE
 const PgSessionStore = pgSession(session);
-const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { require: true, rejectUnauthorized: false }});
 
 app.use(
   session({
@@ -124,10 +118,24 @@ app.get('/api/me', async (req, res) => {
     if (req.session.admin) {
       return res.json({ user: req.session.user, isAdmin: true });
     }
-    const user = await prisma.user.findUnique({
-      where: { id: req.session.user.id },
-      include: { recentlyPlayed: { include: { song: true }, orderBy: { playedAt: 'desc' }, take: 12 } }
+    const user = await User.findByPk(req.session.user.id, {
+      include: [
+        { 
+          model: RecentlyPlayed, 
+          as: 'recentlyPlayed',
+          include: [{ model: Song, as: 'song' }], 
+        },
+        {
+          model: Song,
+          as: 'favorites',
+          through: { attributes: [] }
+        }
+      ],
+      order: [[{ model: RecentlyPlayed, as: 'recentlyPlayed' }, 'playedAt', 'DESC']],
+      // We limit to fetching some history. Since Sequelize doesn't allow easy nested order limits,
+      // it might fetch all history, but we slice it in the frontend or here.
     });
+    
     res.json({ user, isAdmin: false });
   } else {
     res.json({ user: null });
@@ -142,7 +150,7 @@ app.post("/api/auth/login", async (req, res) => {
     return req.session.save(() => res.json({ success: true, user: req.session.user }));
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await User.findOne({ where: { email } });
   if (!user) return res.status(400).json({ error: "Invalid email or password" });
 
   try {
@@ -159,13 +167,15 @@ app.post("/api/auth/login", async (req, res) => {
 app.post("/api/auth/register", async (req, res) => {
   const { username, email, password } = req.body;
   try {
-    const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
+    const existing = await User.findOne({ 
+      where: { 
+        [Op.or]: [{ email }, { username }] 
+      } 
+    });
     if (existing) return res.status(400).json({ error: "Email or username already used" });
 
     const encryptedPassword = encrypt(password);
-    const user = await prisma.user.create({
-      data: { username, email, password: encryptedPassword }
-    });
+    const user = await User.create({ username, email, password: encryptedPassword });
     res.json({ success: true, user: { id: user.id, username: user.username, email: user.email } });
   } catch (err) {
     res.status(500).json({ error: "Registration failed" });
@@ -180,10 +190,15 @@ app.post("/api/auth/logout", (req, res) => {
 app.post("/api/dashboard/update-username", requireLogin, async (req, res) => {
   const { username } = req.body;
   try {
-    const existing = await prisma.user.findFirst({ where: { username, NOT: { id: req.session.user.id } } });
+    const existing = await User.findOne({ 
+      where: { 
+        username, 
+        id: { [Op.ne]: req.session.user.id } 
+      } 
+    });
     if (existing) return res.status(400).json({ error: "Username already taken" });
 
-    await prisma.user.update({ where: { id: req.session.user.id }, data: { username } });
+    await User.update({ username }, { where: { id: req.session.user.id } });
     req.session.user.username = username;
     res.json({ success: true, user: req.session.user });
   } catch (err) {
@@ -193,12 +208,12 @@ app.post("/api/dashboard/update-username", requireLogin, async (req, res) => {
 app.post("/api/dashboard/update-password", requireLogin, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.session.user.id } });
+    const user = await User.findByPk(req.session.user.id);
     const decrypted = decrypt(user.password);
     if (decrypted !== currentPassword) return res.status(400).json({ error: "Current password incorrect" });
 
     const encryptedPassword = encrypt(newPassword);
-    await prisma.user.update({ where: { id: req.session.user.id }, data: { password: encryptedPassword } });
+    await User.update({ password: encryptedPassword }, { where: { id: req.session.user.id } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to update" });
@@ -209,73 +224,117 @@ app.get("/api/search", async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json({ songs: [], albums: [] });
 
-  const searchFilter = { contains: q, mode: 'insensitive' };
+  const searchFilter = { [Op.iLike]: `%${q}%` };
   
-  const songs = await prisma.song.findMany({
+  const songs = await Song.findAll({
     where: {
-      OR: [
+      [Op.or]: [
         { title: searchFilter },
         { artist: searchFilter },
         { language: searchFilter }
       ]
     },
-    include: { album: true }
+    include: [{ model: Album, as: 'album' }]
   });
 
-  const albums = await prisma.album.findMany({
+  const albums = await Album.findAll({
     where: {
-      OR: [
+      [Op.or]: [
         { name: searchFilter },
         { artist: searchFilter }
       ]
     },
-    include: { songs: true }
+    include: [{ model: Song, as: 'songs' }]
   });
 
   res.json({ songs, albums });
+});
+
+// FAVORITES
+app.get("/api/favorites", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.user.id, {
+      include: [{
+        model: Song,
+        as: 'favorites',
+        include: [{ model: Album, as: 'album' }],
+        through: { attributes: [] }
+      }]
+    });
+    res.json({ favorites: user ? user.favorites : [] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch favorites" });
+  }
+});
+
+app.get("/api/favorites/check/:id", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.user.id);
+    const hasFavorite = await user.hasFavorite(req.params.id);
+    res.json({ isFavorite: hasFavorite });
+  } catch (err) {
+    res.json({ isFavorite: false });
+  }
+});
+
+app.post("/api/favorites/add/:id", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.user.id);
+    await user.addFavorite(req.params.id);
+    res.json({ success: true, message: "Added to favorites" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to add favorite" });
+  }
+});
+
+app.post("/api/favorites/remove/:id", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.user.id);
+    await user.removeFavorite(req.params.id);
+    res.json({ success: true, message: "Removed from favorites" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to remove favorite" });
+  }
 });
 
 // PUBLIC DATA
 app.get("/api/songs", async (req, res) => {
   const { lang } = req.query;
   const where = lang ? { language: lang } : {};
-  let songs = await prisma.song.findMany({ where, orderBy: { createdAt: 'desc' }, include: { album: true } });
-  // Shuffle songs
+  let songs = await Song.findAll({ where, order: [['createdAt', 'DESC']], include: [{ model: Album, as: 'album' }] });
   songs = songs.sort(() => Math.random() - 0.5);
   res.json({ songs });
 });
 
 app.get("/api/home", async (req, res) => {
-  const bestHindi = await prisma.song.findMany({ where: { language: 'Hindi' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
-  const bestPunjabi = await prisma.song.findMany({ where: { language: 'Punjabi' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
-  const bestEnglish = await prisma.song.findMany({ where: { language: 'English' }, orderBy: { createdAt: 'desc' }, take: 5, include: { album: true } });
-  const albums = await prisma.album.findMany({ include: { songs: true } });
+  const bestHindi = await Song.findAll({ where: { language: 'Hindi' }, order: [['createdAt', 'DESC']], limit: 5, include: [{ model: Album, as: 'album' }] });
+  const bestPunjabi = await Song.findAll({ where: { language: 'Punjabi' }, order: [['createdAt', 'DESC']], limit: 5, include: [{ model: Album, as: 'album' }] });
+  const bestEnglish = await Song.findAll({ where: { language: 'English' }, order: [['createdAt', 'DESC']], limit: 5, include: [{ model: Album, as: 'album' }] });
+  const albums = await Album.findAll({ include: [{ model: Song, as: 'songs' }] });
   res.json({ bestHindi, bestPunjabi, bestEnglish, albums });
 });
 
 // PLAYLISTS
 app.get("/api/playlists", requireLogin, async (req, res) => {
-  const playlists = await prisma.playlist.findMany({ 
+  const playlists = await Playlist.findAll({ 
     where: { userId: req.session.user.id },
-    include: { songs: true }
+    include: [{ model: Song, as: 'songs' }]
   });
   res.json({ playlists });
 });
 app.post("/api/playlists", requireLogin, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Name required" });
-  const playlist = await prisma.playlist.create({
-    data: { name, userId: req.session.user.id }
-  });
+  const playlist = await Playlist.create({ name, userId: req.session.user.id });
   res.json({ success: true, playlist });
 });
 app.post("/api/playlists/:playlistId/add/:songId", requireLogin, async (req, res) => {
   try {
     const { playlistId, songId } = req.params;
-    await prisma.playlist.update({
-      where: { id: playlistId, userId: req.session.user.id },
-      data: { songs: { connect: { id: songId } } }
-    });
+    const playlist = await Playlist.findOne({ where: { id: playlistId, userId: req.session.user.id } });
+    if (playlist) {
+      await playlist.addSong(songId);
+    }
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -284,10 +343,10 @@ app.post("/api/playlists/:playlistId/add/:songId", requireLogin, async (req, res
 app.post("/api/playlists/:playlistId/remove/:songId", requireLogin, async (req, res) => {
   try {
     const { playlistId, songId } = req.params;
-    await prisma.playlist.update({
-      where: { id: playlistId, userId: req.session.user.id },
-      data: { songs: { disconnect: { id: songId } } }
-    });
+    const playlist = await Playlist.findOne({ where: { id: playlistId, userId: req.session.user.id } });
+    if (playlist) {
+      await playlist.removeSong(songId);
+    }
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -295,7 +354,7 @@ app.post("/api/playlists/:playlistId/remove/:songId", requireLogin, async (req, 
 });
 app.delete("/api/playlists/:playlistId", requireLogin, async (req, res) => {
   try {
-    await prisma.playlist.delete({ where: { id: req.params.playlistId, userId: req.session.user.id } });
+    await Playlist.destroy({ where: { id: req.params.playlistId, userId: req.session.user.id } });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -304,32 +363,31 @@ app.delete("/api/playlists/:playlistId", requireLogin, async (req, res) => {
 
 // FAVORITES
 app.get("/api/favorites", requireLogin, async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.session.user.id },
-    include: { favorites: true }
+  const user = await User.findByPk(req.session.user.id, {
+    include: [{ model: Song, as: 'favorites' }]
   });
-  res.json({ favorites: user.favorites });
+  res.json({ favorites: user ? user.favorites : [] });
 });
 app.post("/api/favorites/add/:songId", requireLogin, async (req, res) => {
   try {
-    await prisma.user.update({
-      where: { id: req.session.user.id },
-      data: { favorites: { connect: { id: req.params.songId } } }
-    });
-    const user = await prisma.user.findUnique({ where: { id: req.session.user.id }, include: { favorites: true } });
-    res.json({ success: true, favorites: user.favorites.map(f => f.id) });
+    const user = await User.findByPk(req.session.user.id);
+    if (user) {
+      await user.addFavorite(req.params.songId);
+    }
+    const reloadedUser = await User.findByPk(req.session.user.id, { include: [{ model: Song, as: 'favorites' }] });
+    res.json({ success: true, favorites: reloadedUser.favorites.map(f => f.id) });
   } catch (e) {
     res.status(500).json({ success: false });
   }
 });
 app.post("/api/favorites/remove/:songId", requireLogin, async (req, res) => {
   try {
-    await prisma.user.update({
-      where: { id: req.session.user.id },
-      data: { favorites: { disconnect: { id: req.params.songId } } }
-    });
-    const user = await prisma.user.findUnique({ where: { id: req.session.user.id }, include: { favorites: true } });
-    res.json({ success: true, favorites: user.favorites.map(f => f.id) });
+    const user = await User.findByPk(req.session.user.id);
+    if (user) {
+      await user.removeFavorite(req.params.songId);
+    }
+    const reloadedUser = await User.findByPk(req.session.user.id, { include: [{ model: Song, as: 'favorites' }] });
+    res.json({ success: true, favorites: reloadedUser.favorites.map(f => f.id) });
   } catch (e) {
     res.status(500).json({ success: false });
   }
@@ -337,11 +395,9 @@ app.post("/api/favorites/remove/:songId", requireLogin, async (req, res) => {
 
 app.post("/api/history/add/:songId", requireLogin, async (req, res) => {
     try {
-        await prisma.recentlyPlayed.create({
-            data: {
-                userId: req.session.user.id,
-                songId: req.params.songId
-            }
+        await RecentlyPlayed.create({
+            userId: req.session.user.id,
+            songId: req.params.songId
         });
         res.json({ success: true });
     } catch(e) {
@@ -351,9 +407,9 @@ app.post("/api/history/add/:songId", requireLogin, async (req, res) => {
 
 // ADMIN
 app.get("/api/admin/data", requireAdmin, async (req, res) => {
-  const users = await prisma.user.findMany();
-  const albums = await prisma.album.findMany({ include: { songs: true } });
-  const allSongs = await prisma.song.findMany({ orderBy: { createdAt: 'desc' } });
+  const users = await User.findAll();
+  const albums = await Album.findAll({ include: [{ model: Song, as: 'songs' }] });
+  const allSongs = await Song.findAll({ order: [['createdAt', 'DESC']] });
   res.json({ users, albums, allSongs });
 });
 
@@ -369,17 +425,14 @@ app.post("/api/admin/albums", requireAdmin, async (req, res) => {
       await coverFile.mv(path.join(albumCoversDir, coverFileName));
     }
     
-    const album = await prisma.album.create({ 
-      data: { 
-        name, 
-        artist,
-        ...(coverPath && { cover: coverPath })
-      } 
+    const album = await Album.create({ 
+      name, 
+      artist,
+      ...(coverPath && { cover: coverPath })
     });
     
     res.json({ success: true, album });
   } catch (error) {
-    console.error('Album creation error:', error);
     res.status(500).json({ error: 'Failed to create album', details: error.message });
   }
 });
@@ -389,12 +442,11 @@ app.put("/api/admin/albums/:albumId/cover", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "No cover file provided" });
   }
   
-  const album = await prisma.album.findUnique({ where: { id: req.params.albumId } });
+  const album = await Album.findByPk(req.params.albumId);
   if (!album) {
     return res.status(404).json({ error: "Album not found" });
   }
   
-  // Delete old cover if exists
   if (album.cover) {
     try { fs.unlinkSync(path.join(__dirname, album.cover)); } catch(e){}
   }
@@ -404,28 +456,24 @@ app.put("/api/admin/albums/:albumId/cover", requireAdmin, async (req, res) => {
   const coverPath = `/uploads/album-covers/${coverFileName}`;
   await coverFile.mv(path.join(albumCoversDir, coverFileName));
   
-  const updatedAlbum = await prisma.album.update({
-    where: { id: req.params.albumId },
-    data: { cover: coverPath }
-  });
+  await Album.update({ cover: coverPath }, { where: { id: req.params.albumId } });
+  const updatedAlbum = await Album.findByPk(req.params.albumId);
   
   res.json({ success: true, album: updatedAlbum });
 });
 app.delete("/api/admin/albums/:albumId", requireAdmin, async (req, res) => {
-  const album = await prisma.album.findUnique({ where: { id: req.params.albumId }, include: { songs: true } });
+  const album = await Album.findByPk(req.params.albumId, { include: [{ model: Song, as: 'songs' }] });
   if (album) {
-    // Delete album cover if exists
     if (album.cover) {
       try { fs.unlinkSync(path.join(__dirname, album.cover)); } catch(e){}
     }
-    
     for (const song of album.songs) {
       if (song.file) try { fs.unlinkSync(path.join(__dirname, song.file)); } catch(e){}
       if (song.thumbnail) try { fs.unlinkSync(path.join(__dirname, song.thumbnail)); } catch(e){}
     }
   }
-  await prisma.song.deleteMany({ where: { albumId: req.params.albumId } });
-  await prisma.album.delete({ where: { id: req.params.albumId } });
+  await Song.destroy({ where: { albumId: req.params.albumId } });
+  await Album.destroy({ where: { id: req.params.albumId } });
   res.json({ success: true });
 });
 
@@ -449,14 +497,14 @@ app.post("/api/admin/songs", requireAdmin, async (req, res) => {
     thumbnail: "/uploads/thumbnails/" + thumbnailFile.name
   };
   if (albumId && albumId !== "none") data.albumId = albumId;
-  const song = await prisma.song.create({ data });
+  const song = await Song.create(data);
   res.json({ success: true, song });
 });
 app.put("/api/admin/songs/:songId", requireAdmin, async (req, res) => {
   const { title, artist, language } = req.body;
   let data = { title, artist, language };
 
-  const old = await prisma.song.findUnique({ where: { id: req.params.songId } });
+  const old = await Song.findByPk(req.params.songId);
   if (req.files?.audio) {
     await req.files.audio.mv(path.join(songsDir, req.files.audio.name));
     if (old.file) try { fs.unlinkSync(path.join(__dirname, old.file)); } catch(e){}
@@ -468,31 +516,26 @@ app.put("/api/admin/songs/:songId", requireAdmin, async (req, res) => {
     data.thumbnail = "/uploads/thumbnails/" + req.files.thumbnail.name;
   }
 
-  const song = await prisma.song.update({ where: { id: req.params.songId }, data });
+  await Song.update(data, { where: { id: req.params.songId } });
+  const song = await Song.findByPk(req.params.songId);
   res.json({ success: true, song });
 });
 app.delete("/api/admin/songs/:songId", requireAdmin, async (req, res) => {
-  const song = await prisma.song.findUnique({ where: { id: req.params.songId } });
+  const song = await Song.findByPk(req.params.songId);
   if (song) {
     if (song.file) try { fs.unlinkSync(path.join(__dirname, song.file)); } catch(e){}
     if (song.thumbnail) try { fs.unlinkSync(path.join(__dirname, song.thumbnail)); } catch(e){}
-    await prisma.song.delete({ where: { id: req.params.songId } });
+    await Song.destroy({ where: { id: req.params.songId } });
   }
   res.json({ success: true });
 });
 
 app.post("/api/admin/albums/:albumId/add/:songId", requireAdmin, async (req, res) => {
-  await prisma.song.update({
-    where: { id: req.params.songId },
-    data: { albumId: req.params.albumId }
-  });
+  await Song.update({ albumId: req.params.albumId }, { where: { id: req.params.songId } });
   res.json({ success: true });
 });
 app.post("/api/admin/albums/:albumId/remove/:songId", requireAdmin, async (req, res) => {
-  await prisma.song.update({
-    where: { id: req.params.songId },
-    data: { albumId: null }
-  });
+  await Song.update({ albumId: null }, { where: { id: req.params.songId } });
   res.json({ success: true });
 });
 

@@ -1,9 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { PrismaClient } from "@prisma/client";
 import https from "https";
-
-const prisma = new PrismaClient();
+import db from "./models/index.js";
+const { Song, sequelize } = db;
 
 function searchArtist(artistName) {
   return new Promise((resolve, reject) => {
@@ -40,6 +39,9 @@ function getTopTracks(artistName) {
 
 async function seedSongs() {
   try {
+    await sequelize.authenticate();
+    await sequelize.sync();
+
     const artists = ['Coldplay', 'Queen', 'The Beatles', 'Linkin Park', 'Imagine Dragons'];
     let totalImported = 0;
 
@@ -52,7 +54,7 @@ async function seedSongs() {
 
         for (const track of tracks.slice(0, 5)) {
           try {
-            const existing = await prisma.song.findFirst({ 
+            const existing = await Song.findOne({ 
               where: { title: track.strTrack, artist: track.strArtist }
             });
             if (existing) continue;
@@ -67,14 +69,12 @@ async function seedSongs() {
               'https://www.bensound.com/bensound-music/bensound-happiness.mp3'
             ];
 
-            await prisma.song.create({
-              data: {
-                title: track.strTrack,
-                artist: track.strArtist,
-                file: bensoundTracks[totalImported % bensoundTracks.length],
-                thumbnail: thumbnail,
-                language: 'English'
-              }
+            await Song.create({
+              title: track.strTrack,
+              artist: track.strArtist,
+              file: bensoundTracks[totalImported % bensoundTracks.length],
+              thumbnail: thumbnail,
+              language: 'English'
             });
             totalImported++;
             await new Promise(resolve => setTimeout(resolve, 2500));
@@ -88,11 +88,11 @@ async function seedSongs() {
     }
 
     console.log(`✅ Successfully seeded ${totalImported} songs from TheAudioDB into PostgreSQL!`);
-    await prisma.$disconnect();
+    await sequelize.close();
     process.exit(0);
   } catch (error) {
     console.error('❌ Error:', error);
-    await prisma.$disconnect();
+    await sequelize.close();
     process.exit(1);
   }
 }

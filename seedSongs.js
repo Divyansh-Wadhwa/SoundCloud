@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import db from "./models/index.js";
+const { Song, sequelize } = db;
 
 const sampleSongs = [
   { title: "Chill Vibes", artist: "Bensound", file: "https://www.bensound.com/bensound-music/bensound-slowmotion.mp3", thumbnail: "https://www.bensound.com/bensound-img/slowmotion.jpg" },
@@ -28,19 +28,20 @@ const sampleSongs = [
 
 async function seedSongs() {
   try {
-    await prisma.song.deleteMany({});
+    await sequelize.authenticate();
+    await sequelize.sync();
+
+    await Song.destroy({ where: {} });
     let imported = 0;
     
     for (const track of sampleSongs) {
       try {
-        await prisma.song.create({
-          data: {
-            title: track.title,
-            artist: track.artist,
-            file: track.file,
-            thumbnail: track.thumbnail,
-            language: "Other"
-          }
+        await Song.create({
+          title: track.title,
+          artist: track.artist,
+          file: track.file,
+          thumbnail: track.thumbnail,
+          language: "Other"
         });
         imported++;
       } catch (err) {
@@ -49,12 +50,12 @@ async function seedSongs() {
     }
 
     console.log(`✅ Successfully seeded ${imported} songs into PostgreSQL!`);
-    await prisma.$disconnect();
+    await sequelize.close();
     process.exit(0);
     
   } catch (error) {
     console.error('❌ Error:', error);
-    await prisma.$disconnect();
+    await sequelize.close();
     process.exit(1);
   }
 }
