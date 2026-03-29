@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 
 export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying }) {
   const audioRef = useRef(null);

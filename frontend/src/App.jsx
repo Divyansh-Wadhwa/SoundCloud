@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Player from './components/Player';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Playlists from './pages/Playlists';
+import Album from './pages/Album';
 import Favorites from './pages/Favorites';
-import AdminPanel from './pages/AdminPanel';
 import Search from './pages/Search';
+import AdminPanel from './pages/AdminPanel';
+import Player from './components/Player';
 import Modal from './components/Modal';
+import axios from 'axios';
 
 // Styles are imported via index.html linking to public/css/style.css 
 import './index.css';
@@ -60,7 +62,8 @@ function App() {
             <Route path="/login" element={<Login setUser={setUser} setIsAdmin={setIsAdmin} />} />
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={<Dashboard user={user} setUser={setUser} />} />
-            <Route path="/playlists" element={<Playlists user={user} />} />
+            <Route path="/playlists" element={<Playlists user={user} queue={queue} setQueue={setQueue} currentSongIndex={currentSongIndex} setCurrentSongIndex={setCurrentSongIndex} isPlaying={isPlaying} setIsPlaying={setIsPlaying} />} />
+            <Route path="/album/:albumId" element={<Album user={user} queue={queue} setQueue={setQueue} currentSongIndex={currentSongIndex} setCurrentSongIndex={setCurrentSongIndex} isPlaying={isPlaying} setIsPlaying={setIsPlaying} />} />
             <Route path="/favorites" element={<Favorites user={user} />} />
             <Route path="/admin" element={<AdminPanel user={user} />} />
             <Route path="/search" element={<Search user={user} setQueue={setQueue} setCurrentSongIndex={setCurrentSongIndex} setIsPlaying={setIsPlaying} />} />

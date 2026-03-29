@@ -44,9 +44,39 @@ app.use(cors({
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(fileUpload());
+
+// API ROUTES - Move before static file serving
+app.get("/api/albums/:albumId", async (req, res) => {
+  try {
+    console.log('Fetching album with ID:', req.params.albumId);
+    const album = await prisma.album.findUnique({ 
+      where: { id: req.params.albumId },
+      include: { 
+        songs: {
+          orderBy: { createdAt: 'asc' }
+        }
+      }
+    });
+    
+    console.log('Album found:', album);
+    
+    if (!album) {
+      console.log('Album not found for ID:', req.params.albumId);
+      return res.status(404).json({ error: "Album not found" });
+    }
+    
+    res.json(album);
+  } catch (error) {
+    console.error('Error fetching album:', error);
+    res.status(500).json({ error: "Failed to fetch album" });
+  }
+});
+
+// Static file serving after API routes
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// SESSION MIDDLEWARE
 const PgSessionStore = pgSession(session);
 const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 

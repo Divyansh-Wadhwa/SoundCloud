@@ -9,6 +9,8 @@ export default function AdminPanel({ user }) {
   const [albums, setAlbums] = useState([]);
   const [users, setUsers] = useState([]);
   const [editingSong, setEditingSong] = useState(null);
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [showAddSongsModal, setShowAddSongsModal] = useState(false);
   const [showCreateAlbum, setShowCreateAlbum] = useState(false);
   const [newAlbum, setNewAlbum] = useState({ name: '', artist: '' });
   const [albumCoverFile, setAlbumCoverFile] = useState(null);
@@ -87,6 +89,35 @@ export default function AdminPanel({ user }) {
       } catch (error) {
         alert('Error deleting album: ' + (error.response?.data?.error || error.message));
       }
+    }
+  };
+
+  const handleAddSongsToAlbum = (album) => {
+    setSelectedAlbum(album);
+    setShowAddSongsModal(true);
+  };
+
+  const handleAddSongToAlbum = async (songId) => {
+    try {
+      await axios.post(`/api/admin/albums/${selectedAlbum.id}/add/${songId}`);
+      // Refresh data
+      const res = await axios.get('/api/admin/data');
+      setAlbums(res.data.albums);
+      setSongs(res.data.allSongs);
+    } catch (error) {
+      alert('Error adding song to album: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleRemoveSongFromAlbum = async (songId) => {
+    try {
+      await axios.post(`/api/admin/albums/${selectedAlbum.id}/remove/${songId}`);
+      // Refresh data
+      const res = await axios.get('/api/admin/data');
+      setAlbums(res.data.albums);
+      setSongs(res.data.allSongs);
+    } catch (error) {
+      alert('Error removing song from album: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -247,15 +278,22 @@ export default function AdminPanel({ user }) {
                      </div>
                    </div>
                    <div className="album-actions">
-                     <button 
-                       className="delete-btn"
-                       onClick={() => handleDeleteAlbum(a.id)}
-                       title="Delete album"
-                       disabled={(a.songs?.length || 0) > 0}
-                     >
-                       <i className="fas fa-trash"></i>
-                     </button>
-                   </div>
+                    <button 
+                      className="edit-btn"
+                      onClick={() => handleAddSongsToAlbum(a)}
+                      title="Add songs to album"
+                    >
+                      <i className="fas fa-plus"></i>
+                    </button>
+                    <button 
+                      className="delete-btn"
+                      onClick={() => handleDeleteAlbum(a.id)}
+                      title="Delete album"
+                      disabled={(a.songs?.length || 0) > 0}
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
                  </div>
                ))}
                {albums.length === 0 && (
@@ -276,6 +314,151 @@ export default function AdminPanel({ user }) {
             onSave={handleSongUpdated}
             onClose={() => setEditingSong(null)}
           />
+        )}
+
+        {/* Add Songs to Album Modal */}
+        {showAddSongsModal && selectedAlbum && (
+          <div className="modal-overlay">
+            <div className="modal-content" style={{maxWidth: '800px', maxHeight: '80vh'}}>
+              <div className="modal-header">
+                <h3>Add Songs to Album: {selectedAlbum.name}</h3>
+                <button className="close-btn" onClick={() => setShowAddSongsModal(false)}>
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="modal-body" style={{maxHeight: '60vh', overflowY: 'auto'}}>
+                <div className="album-info" style={{background: 'var(--bg-secondary)', padding: '15px', borderRadius: '8px', marginBottom: '20px'}}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                    {selectedAlbum.cover ? (
+                      <img src={`http://localhost:5000${selectedAlbum.cover}`} alt={selectedAlbum.name} style={{width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover'}} />
+                    ) : (
+                      <div style={{width: '60px', height: '60px', borderRadius: '8px', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                        <i className="fas fa-compact-disc" style={{fontSize: '24px', color: 'var(--text-secondary)'}}></i>
+                      </div>
+                    )}
+                    <div>
+                      <h4 style={{margin: '0 0 5px 0', color: 'var(--text-primary)'}}>{selectedAlbum.name}</h4>
+                      <p style={{margin: 0, color: 'var(--text-secondary)'}}>{selectedAlbum.artist}</p>
+                      <p style={{margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem'}}>
+                        {selectedAlbum.songs?.length || 0} songs in album
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <h4 style={{marginBottom: '15px', color: 'var(--text-primary)'}}>
+                  <i className="fas fa-music" style={{marginRight: '8px'}}></i>
+                  Available Songs
+                </h4>
+                
+                <div className="songs-list">
+                  {songs.filter(song => !song.albumId || song.albumId !== selectedAlbum.id).map(song => (
+                    <div key={song.id} className="song-item" style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '8px',
+                      marginBottom: '10px',
+                      border: '1px solid var(--border-color)'
+                    }}>
+                      <div style={{width: '40px', textAlign: 'center', color: 'var(--text-secondary)'}}>
+                        {song.thumbnail ? (
+                          <img src={`http://localhost:5000${song.thumbnail}`} alt={song.title} style={{width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover'}} />
+                        ) : (
+                          <i className="fas fa-music"></i>
+                        )}
+                      </div>
+                      <div style={{flex: 1, marginLeft: '15px'}}>
+                        <h5 style={{margin: '0 0 3px 0', color: 'var(--text-primary)', fontSize: '0.95rem'}}>{song.title}</h5>
+                        <p style={{margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem'}}>{song.artist} • {song.language}</p>
+                      </div>
+                      <button 
+                        className="add-btn"
+                        onClick={() => handleAddSongToAlbum(song.id)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'var(--accent-1)',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <i className="fas fa-plus"></i>
+                        Add
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {songs.filter(song => !song.albumId || song.albumId !== selectedAlbum.id).length === 0 && (
+                    <div style={{textAlign: 'center', padding: '40px', color: 'var(--text-secondary)'}}>
+                      <i className="fas fa-music" style={{fontSize: '2rem', marginBottom: '10px'}}></i>
+                      <p>All songs are already in this album</p>
+                    </div>
+                  )}
+                </div>
+
+                {selectedAlbum.songs?.length > 0 && (
+                  <>
+                    <h4 style={{margin: '25px 0 15px 0', color: 'var(--text-primary)'}}>
+                      <i className="fas fa-list" style={{marginRight: '8px'}}></i>
+                      Songs in Album
+                    </h4>
+                    <div className="songs-list">
+                      {selectedAlbum.songs.map(song => (
+                        <div key={song.id} className="song-item" style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '12px',
+                          background: 'var(--bg-secondary)',
+                          borderRadius: '8px',
+                          marginBottom: '10px',
+                          border: '1px solid var(--border-color)',
+                          opacity: 0.7
+                        }}>
+                          <div style={{width: '40px', textAlign: 'center', color: 'var(--text-secondary)'}}>
+                            {song.thumbnail ? (
+                              <img src={`http://localhost:5000${song.thumbnail}`} alt={song.title} style={{width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover'}} />
+                            ) : (
+                              <i className="fas fa-music"></i>
+                            )}
+                          </div>
+                          <div style={{flex: 1, marginLeft: '15px'}}>
+                            <h5 style={{margin: '0 0 3px 0', color: 'var(--text-primary)', fontSize: '0.95rem'}}>{song.title}</h5>
+                            <p style={{margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem'}}>{song.artist} • {song.language}</p>
+                          </div>
+                          <button 
+                            className="remove-btn"
+                            onClick={() => handleRemoveSongFromAlbum(song.id)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.9)',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}
+                          >
+                            <i className="fas fa-minus"></i>
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
