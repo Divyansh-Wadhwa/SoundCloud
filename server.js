@@ -9,6 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fileUpload from "express-fileupload";
 import fs from "fs";
+import crypto from "crypto";
 
 import pkg from '@prisma/client';
 const { PrismaClient } = pkg;
@@ -25,6 +26,22 @@ const albumCoversDir = path.join(uploadsDir, "album-covers");
 [songsDir, thumbnailsDir, albumCoversDir].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
+
+// File validation helper
+function validateFile(file, allowedTypes, maxSize = 10 * 1024 * 1024) { // 10MB default
+  if (!file) return { valid: false, error: 'No file provided' };
+  
+  if (file.size > maxSize) {
+    return { valid: false, error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit` };
+  }
+  
+  const fileExtension = file.name.split('.').pop().toLowerCase();
+  if (!allowedTypes.includes(fileExtension)) {
+    return { valid: false, error: `File type .${fileExtension} not allowed` };
+  }
+  
+  return { valid: true };
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +63,7 @@ app.use(express.json());
 app.use(fileUpload());
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(express.static(path.join(__dirname, "frontend/dist")));
 
 const PgSessionStore = pgSession(session);
 const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -90,6 +108,8 @@ app.get('/api/me', async (req, res) => {
 // AUTH
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
+  
+  // Check admin credentials using environment variables
   if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
     req.session.admin = true;
     req.session.user = { id: "0", username: 'Admin', email: process.env.ADMIN_EMAIL, isAdmin: true };
@@ -194,8 +214,11 @@ app.get("/api/songs", async (req, res) => {
   const { lang } = req.query;
   const where = lang ? { language: lang } : {};
   let songs = await prisma.song.findMany({ where, orderBy: { createdAt: 'desc' }, include: { album: true } });
-  // Shuffle songs
-  songs = songs.sort(() => Math.random() - 0.5);
+  // Shuffle songs using Fisher-Yates algorithm
+  for (let i = songs.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [songs[i], songs[j]] = [songs[j], songs[i]];
+  }
   res.json({ songs });
 });
 
@@ -314,9 +337,19 @@ app.get("/api/admin/data", requireAdmin, async (req, res) => {
 app.post("/api/admin/albums", requireAdmin, async (req, res) => {
   try {
     const { name, artist } = req.body;
+    
+    if (!name || !artist) {
+      return res.status(400).json({ error: "Name and artist are required" });
+    }
+    
     let coverPath = null;
     
     if (req.files?.cover) {
+      const coverValidation = validateFile(req.files.cover, ['jpg', 'jpeg', 'png', 'webp'], 5 * 1024 * 1024);
+      if (!coverValidation.valid) {
+        return res.status(400).json({ error: `Cover image: ${coverValidation.error}` });
+      }
+      
       const coverFile = req.files.cover;
       const coverFileName = `${Date.now()}-${coverFile.name}`;
       coverPath = `/uploads/album-covers/${coverFileName}`;
@@ -385,8 +418,22 @@ app.delete("/api/admin/albums/:albumId", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/songs", requireAdmin, async (req, res) => {
   const { title, artist, albumId, language } = req.body;
-  if (!title || !artist || !req.files?.audio || !req.files?.thumbnail)
-    return res.status(400).json({ error: "All fields required" });
+  
+  // Validate required fields
+  if (!title || !artist || !language) {
+    return res.status(400).json({ error: "All text fields required" });
+  }
+  
+  // Validate files
+  const audioValidation = validateFile(req.files?.audio, ['mp3', 'wav', 'ogg', 'm4a'], 20 * 1024 * 1024); // 20MB for audio
+  const thumbnailValidation = validateFile(req.files?.thumbnail, ['jpg', 'jpeg', 'png', 'webp'], 5 * 1024 * 1024); // 5MB for images
+  
+  if (!audioValidation.valid) {
+    return res.status(400).json({ error: `Audio file: ${audioValidation.error}` });
+  }
+  if (!thumbnailValidation.valid) {
+    return res.status(400).json({ error: `Thumbnail file: ${thumbnailValidation.error}` });
+  }
 
   const audioFile = req.files.audio;
   const thumbnailFile = req.files.thumbnail;
@@ -453,7 +500,23 @@ app.post("/api/admin/albums/:albumId/remove/:songId", requireAdmin, async (req, 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
-  res.status(500).json({ error: 'Internal server error', details: err.message });
+  
+  // Don't expose internal error details in production
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const errorResponse = { 
+    error: 'Internal server error',
+    ...(isDevelopment && { details: err.message })
+  };
+  
+  res.status(500).json(errorResponse);
+});
+
+// Serve frontend for all non-API routes
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, 'frontend/dist/index.html'));
 });
 
 // 404 handler
