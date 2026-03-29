@@ -6,6 +6,9 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [previousVolume, setPreviousVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   
   const currentSong = queue[index] || null;
 
@@ -18,6 +21,12 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
       }
     }
   }, [isPlaying, currentSong, index]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
 
   const togglePlay = () => {
     if(!currentSong) return;
@@ -41,6 +50,25 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
     const time = (e.target.value / 100) * duration;
     audioRef.current.currentTime = time;
     setCurrentTime(time);
+  };
+
+  const handleVolumeChange = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (newVolume > 0 && isMuted) {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      setVolume(previousVolume);
+    } else {
+      setIsMuted(true);
+      setPreviousVolume(volume);
+      setVolume(0);
+    }
   };
 
   const fmt = (s) => {
@@ -87,13 +115,26 @@ export default function Player({ queue, index, setIndex, isPlaying, setIsPlaying
                 min="0" max="100" 
                 value={pct} 
                 step="0.1" 
-                style={{ verticalAlign: 'middle', '--pct': `${pct}%` }} 
                 onChange={handleSeek}
               />
               <span id="bp-duration">{fmt(duration)}</span>
             </div>
           </div>
           <div className="bp-right">
+            <div className="volume-control">
+              <button className="bp-btn" onClick={toggleMute} title={isMuted ? "Unmute" : "Mute"}>
+                <i className={`fas ${isMuted || volume === 0 ? 'fa-volume-mute' : volume < 0.5 ? 'fa-volume-down' : 'fa-volume-up'}`}></i>
+              </button>
+              <input 
+                type="range" 
+                className="volume-slider" 
+                min="0" max="1" 
+                value={isMuted ? 0 : volume} 
+                step="0.01" 
+                onChange={handleVolumeChange}
+                style={{ width: '80px' }}
+              />
+            </div>
             <button className="bp-btn bp-favorite" title="Add to favorites" onClick={() => {
                // Global favorite logic mock, ideally calls API
                fetch(`/api/favorites/add/${currentSong.id}`, {method: 'POST'})

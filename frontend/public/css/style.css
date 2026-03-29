@@ -323,12 +323,103 @@ h3 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; }
 }
 
 .bp-right {
-  width: 180px;
+  width: 280px;
   text-align: right;
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: flex-end;
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-slider {
+  width: 80px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(102, 126, 234, 0.8);
+  border: 2px solid var(--accent-1);
+  transition: all 0.2s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: var(--accent-2);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(102, 126, 234, 0.8);
+  border: 2px solid var(--accent-1);
+  transition: all 0.2s ease;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  background: var(--accent-2);
+}
+
+.progress-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.8);
+  border: 2px solid var(--accent-1);
+  transition: all 0.2s ease;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.progress-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 12px rgba(102, 126, 234, 1);
+}
+
+.progress-slider-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.8);
+  border: 2px solid var(--accent-1);
+  transition: all 0.2s ease;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.progress-slider-input::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 12px rgba(102, 126, 234, 1);
 }
 
 .bp-favorite, .bp-collapse {

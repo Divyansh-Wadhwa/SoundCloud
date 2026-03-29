@@ -15,6 +15,12 @@ const { PrismaClient } = pkg;
 import { encrypt, decrypt } from "./utils/encryption.js";
 
 const prisma = new PrismaClient();
+
+// Test database connection
+prisma.$connect()
+  .then(() => console.log('Database connected successfully'))
+  .catch(err => console.error('Database connection failed:', err));
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -75,6 +81,17 @@ app.get("/api/albums/:albumId", async (req, res) => {
 // Static file serving after API routes
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Serve built frontend
+app.use(express.static(path.join(__dirname, "frontend", "dist")));
+
+// Serve frontend for all non-API routes
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
+});
 
 // SESSION MIDDLEWARE
 const PgSessionStore = pgSession(session);
