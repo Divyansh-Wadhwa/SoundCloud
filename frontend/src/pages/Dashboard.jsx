@@ -31,7 +31,7 @@ export default function Dashboard({ user, setUser }) {
       setMessage(err.response?.data?.error || 'Failed to update password');
     }
   };
-
+//
   return (
     <div className="content-section-new">
       <div className="container-fluid">
